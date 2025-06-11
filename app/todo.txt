@@ -1,0 +1,6 @@
+- 'loading...' 'calculating...' are not siplaying in the right ime
+- save locally calculated data and updte the switch in gui
+- add times it took to calculate the embeddings for each method
+- small per class distribution graph, something like kaggle stts about the dataset down in the datset file
+
+- make also option to color by class not label

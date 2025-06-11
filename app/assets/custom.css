@@ -1,0 +1,95 @@
+.custom-dropdown-style .Select-value-label {
+    color: white !important;
+}
+
+.custom-dropdown-style .Select-input {
+    color: white !important;
+}
+
+.custom-dropdown-style .Select-option.is-selected {
+    background-color: #007bff; /* Primary blue for selected */
+    color: white !important;
+}
+
+.custom-dropdown-style .Select-option.is-focused {
+    background-color: #0056b3; /* Darker blue for focused */
+    color: white !important;
+}
+
+/* Base style for all buttons */
+.thumbnail-button, .control-button {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid #2c3e50;
+    border-radius: 4px;
+    padding: 0.5rem;
+    background-color: #34495e;
+    margin-bottom: 0.5rem;
+    color: #ecf0f1;
+}
+
+.thumbnail-button:hover, .control-button:hover {
+    background-color: #2c3e50;
+}
+
+/* Selected state for buttons */
+.thumbnail-button.selected, .control-button.selected {
+    /* border: 1px solid #3498db; */
+    background-color: #2980b9;
+    box-shadow: 0 0 3px rgba(52, 152, 219, 0.3);
+}
+
+/* Timing display style */
+.timing-display {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.8rem;
+    color: #bdc3c7;
+}
+
+/* Method button container */
+.method-button-container {
+    position: relative;
+}
+
+/* Override Bootstrap button colors to match theme */
+.btn-info {
+    background-color: #34495e !important;
+    border-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+}
+
+.btn-info:hover {
+    background-color: #2c3e50 !important;
+}
+
+.btn-success {
+    background-color: #34495e !important;
+    border-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+}
+
+.btn-success:hover {
+    background-color: #2c3e50 !important;
+}
+
+.btn-secondary {
+    background-color: #34495e !important;
+    border-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+}
+
+.btn-secondary:hover {
+    background-color: #2c3e50 !important;
+}
+
+.btn-primary {
+    background-color: #34495e !important;
+    border-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+}
+
+.btn-primary:hover {
+    background-color: #2c3e50 !important;
+} 
