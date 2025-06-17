@@ -42,14 +42,19 @@ def create_layout(app):
                     dbc.Col(html.Label("Pick a Dataset :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
                     dbc.Col(dcc.Dropdown(
                         id='dataset-dropdown',
-                        options=[{"label": name, "value": name} for name in ["Digits", "Iris", "Wine", "Breast Cancer"]] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}],
+                        options=[
+                            {"label": name, "value": name} for name in [
+                                "Digits", "Iris", "Wine", "Breast Cancer",
+                                "MNIST", "Fashion MNIST", "Elephant"
+                            ]
+                        ] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}],
                         value='Digits',
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
                             'border': '1px solid #dee2e6'
                         },
-                        className="dash-bootstrap-dropdown",
+                        className="dash-bootstrap-dropdown custom-dropdown",
                         optionHeight=35,
                         persistence=True,
                         persistence_type='session'
@@ -65,14 +70,14 @@ def create_layout(app):
                     dbc.Col(html.Label("Distance measure :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
                     dbc.Col(dcc.Dropdown(
                         id='dist-dropdown',
-                        options=[{"label": name, "value": name} for name in ['opt1', 'opt2', 'opt3']],
-                        value='Digits',
+                        options=[{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']],
+                        value='opt1',
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
                             'border': '1px solid #dee2e6'
                         },
-                        className="dash-bootstrap-dropdown",
+                        className="dash-bootstrap-dropdown custom-dropdown",
                         optionHeight=35,
                         persistence=True,
                         persistence_type='session'
@@ -84,6 +89,24 @@ def create_layout(app):
                     ), width=4)
                 ], className="mb-3 align-items-center"),
                 dbc.Row([
+                    dbc.Col(html.Label("Image space :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    dbc.Col(dcc.Dropdown(
+                        id='image-space-dropdown',
+                        options=[{"label": name, "value": name} for name in ["layer 1", "layer 2", "layer 3", "final layer"]],
+                        value='Raw',
+                        style={
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': '1px solid #dee2e6'
+                        },
+                        className="dash-bootstrap-dropdown custom-dropdown",
+                        optionHeight=35,
+                        persistence=True,
+                        persistence_type='session'
+                    ), width=9)
+                ], className="mb-3 align-items-center"),
+
+                dbc.Row([
                     dbc.Col([
                         dbc.Row([
                             dbc.Col(html.P("Recalculate", className="mb-0 me-2 text-white"), width="auto"),
@@ -93,50 +116,36 @@ def create_layout(app):
                                 className="me-2"
                             ), width="auto"),
                             dbc.Col(html.P("Use Saved", className="mb-0 text-white"), width="auto"),
-                            
+                        ], align="center", justify="between", className="mb-3"),
+                        dbc.Row([
+                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(dbc.Switch(
+                                id="parametric-iterative-switch",
+                                value=False,
+                                className="me-2"
+                            ), width="auto"),
+                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
                             dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width="auto"),
                             dbc.Col(dbc.Switch(
-                                id="recalculate-switch",
+                                id="dots-images-switch",
                                 value=False,
                                 className="me-2"
                             ), width="auto"),
                             dbc.Col(html.P("Images", className="mb-0 text-white"), width="auto")
                         ], align="center", justify="between", className="mb-3"),
-                    ], width=6),
-                    
-                    dbc.Col(dbc.Button(
+                    ], width=12),
+                ]),
+                dbc.Col(dbc.Button(
                             [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"],
                             id="generative-mode-btn",
                             className="mb-3 w-100 control-button"
-                        ), width=6)
-                ]),
-
-
-                # html.Label("Distance Measure:", className="mb-1", style={'color': 'white'}),
-                # dbc.Row(
-                #     [
-                #         dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "opt1"], id="dist-opt1-btn", className="me-2 control-button"), width="auto"),
-                #         dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "opt2"], id="dist-opt2-btn", className="me-2 control-button"), width="auto"),
-                #         dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "Upload Custom"], id="dist-upload-btn", className="control-button"), width="auto"),
-                #     ],
-                #     className="mb-3"
-                # ),
-
-                html.Label("Layer:", className="mb-1", style={'color': 'white'}),
-                dbc.Row(
-                    [
-                        dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "opt1"], id="layer-opt1-btn", className="me-2 control-button"), width="auto"),
-                        dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "opt2"], id="layer-opt2-btn", className="me-2 control-button"), width="auto"),
-                        dbc.Col(dbc.Button([html.I(className="fas fa-pencil-alt me-2"), "opt3"], id="layer-opt3-btn", className="control-button"), width="auto"),
-                    ],
-                    className="mb-3"
-                ),
-
-
-                dcc.Store(id='embedding-cache', data={})
+                        ), width=12),
+                dcc.Store(id='embedding-cache', data={}),
+                
             ], width=4),
+            
 
             # Right Column (8/12 width): Main Graph and Thumbnails
             dbc.Col([
@@ -158,15 +167,51 @@ def create_layout(app):
                                     style={'height': '60vh', 'margin-bottom': '0.5rem'},
                                     config={'displayModeBar': True}
                                 ),
-                                html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'})
+                                html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'}),
+                                html.Div([
+                                    html.Label("Iterative process:", style={'margin-top': '1rem', 'margin-bottom': '0.5rem', 'font-weight': 'bold'}),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Button(
+                                                html.I(className="fas fa-play"),
+                                                id="slider-play-btn",
+                                                color="primary",
+                                                outline=True,
+                                                style={"margin-right": "0.5rem"}
+                                            ),
+                                            width="auto"
+                                        ),
+                                        dbc.Col(
+                                            dcc.Slider(
+                                                id='iteration-slider',
+                                                min=0,
+                                                max=10,
+                                                step=1,
+                                                value=0,
+                                                marks=None,
+                                                tooltip={"placement": "bottom", "always_visible": True},
+                                                updatemode='drag',
+                                                included=False,
+                                                className='mb-3'
+                                            ),
+                                            width=True
+                                        ),
+                                        dcc.Interval(
+                                            id='slider-interval',
+                                            interval=500,  # ms
+                                            n_intervals=0,
+                                            disabled=True
+                                        )
+                                    ], align="center", className="g-0"),
+                                ], style={'margin-bottom': '1rem'})
                             ],
                             fullscreen=False,
                             parent_style={'position': 'relative'},
                             style={'position': 'relative'}
                         )
                     ], width=9),
+                    # Thumbnails (right, vertical, stretch, now width=3)
                     dbc.Col([
-                        # Thumbnail buttons
                         html.Div([
                             html.Div(
                                 id='tsne-thumbnail-click',
@@ -180,9 +225,7 @@ def create_layout(app):
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
                                 ]
-                            )
-                        ]),
-                        html.Div([
+                            ),
                             html.Div(
                                 id='umap-thumbnail-click',
                                 className="method-button-container thumbnail-button mb-3",
@@ -195,9 +238,7 @@ def create_layout(app):
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
                                 ]
-                            )
-                        ]),
-                        html.Div([
+                            ),
                             html.Div(
                                 id='trimap-thumbnail-click',
                                 className="method-button-container thumbnail-button mb-3 selected",
@@ -211,19 +252,49 @@ def create_layout(app):
                                     )
                                 ]
                             )
-                        ])
+                        ], style={'display': 'flex', 'flexDirection': 'column', 'height': '60vh', 'justifyContent': 'space-between'})
                     ], width=3)
                 ]),
-
                 html.Div(id='umap-warning', style={'color': 'red', 'margin-bottom': '0.5rem'}),
-
-                # Dataset information display
-                html.Div(
-                    id='metadata-display',
-                    children="",
-                    style={'height': '20vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-top': '1rem'}
-                ),
-                # dcc.Store(id='embedding-cache', data={}) # Moved to left column
+                # Bottom row: Dataset Information (left), Dataset Augmentation (right)
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id='metadata-display',
+                            children="",
+                            style={'height': '20vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': '#23272b', 'color': 'white'}
+                        ),
+                        width=7
+                    ),
+                    dbc.Col(
+                        html.Div([
+                            html.H5("Dataset Augmentation", className="text-center mb-2", style={'color': 'white'}),
+                            html.Label("Brightness", style={'color': 'white'}),
+                            dcc.Slider(
+                                id='brightness-slider',
+                                min=0,
+                                max=2,
+                                step=0.01,
+                                value=1,
+                                marks={0: '0', 1: '1', 2: '2'},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                                className='mb-3'
+                            ),
+                            html.Label("Contrast", style={'color': 'white'}),
+                            dcc.Slider(
+                                id='contrast-slider',
+                                min=0,
+                                max=2,
+                                step=0.01,
+                                value=1,
+                                marks={0: '0', 1: '1', 2: '2'},
+                                tooltip={"placement": "bottom", "always_visible": False},
+                                className='mb-3'
+                            )
+                        ], style={'height': '100%', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'})
+                        , width=5
+                    )
+                ])
             ], width=8)
         ])
     ], className="p-4")

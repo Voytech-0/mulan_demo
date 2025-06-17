@@ -1,6 +1,14 @@
-- 'loading...' 'calculating...' are not siplaying in the right ime
+- 'loading...' 'calculating...' are not displaying in the right time
 - save locally calculated data and updte the switch in gui
-- add times it took to calculate the embeddings for each method
 - small per class distribution graph, something like kaggle stts about the dataset down in the datset file
-
-- make also option to color by class not label
+- name the labels by classes
+- query option in dataset windowv + info about how to use
+- when generative mode on, make the left top window without smaller windows, also iterative slider disapear
+- make iterative slider correspond to iterations of algorithm (save intemediate embeddings - maybe absolute pain)
+- also when just image data, make just one window for image displaying (no additional metadata on the righ)
+- make info about format of cutom data/additional datapoint and implement those
+- implement the different distances
+- add buttons for add new datapoint and full grid and siplay in the left top corner
+- PAC dataset
+- fix layout
+- implement different image space whatever that means (maybe only diplay it when generative mode: could replace the iterative slider)
