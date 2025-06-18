@@ -166,19 +166,23 @@ def compute_trimap(X, distance):
         print('Starting TRIMAP calculation...')
 
         # Adjust n_inliers based on dataset size
-        n_points = X.shape[0]
-        n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
+        # n_points = X.shape[0]
+        # n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
 
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False, output_metric=distance, auto_diff=False)
+        emb = trimap.transform(key, X, distance='euclidean', verbose=False, output_metric=distance, auto_diff=False)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
 
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
         print(f'Total TRIMAP calculation took: {total_time:.2f} seconds')
+    if distance == 'haversine':
+        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+        y = -np.arccos(np.cos(result[:, 0]))
+        result = np.column_stack((x, y))
     return result, total_time
 
 
@@ -203,6 +207,10 @@ def compute_umap(X, distance):
         emb = reducer.fit_transform(X)
         result = np.array(emb)
         print('umap calculated')
+    if distance == 'haversine':
+        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+        y = -np.arccos(np.cos(result[:, 0]))
+        result = np.column_stack((x, y))
     return result, time.time() - start_time
 
 
