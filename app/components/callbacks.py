@@ -166,13 +166,13 @@ def compute_trimap(X, distance):
         print('Starting TRIMAP calculation...')
 
         # Adjust n_inliers based on dataset size
-        # n_points = X.shape[0]
-        # n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
+        n_points = X.shape[0]
+        n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
 
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, distance='euclidean', verbose=False, output_metric=distance, auto_diff=False)
+        emb = trimap.transform(key, X, distance='euclidean', n_inliers=n_inliers, verbose=False, output_metric=distance, auto_diff=False, export_iters=True)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
 
@@ -180,9 +180,9 @@ def compute_trimap(X, distance):
         total_time = time.time() - start_time
         print(f'Total TRIMAP calculation took: {total_time:.2f} seconds')
     if distance == 'haversine':
-        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        y = -np.arccos(np.cos(result[:, 0]))
-        result = np.column_stack((x, y))
+        x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]), np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
+        y = -np.arccos(np.cos(result[:, :, 0]))
+        result = np.stack([x, y], axis=-1)
     return result, total_time
 
 
@@ -241,15 +241,151 @@ def create_datapoint_image(data_point, size=(20, 20)):
     return f"data:image/png;base64,{img_str}"
 
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False):
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, animated=False):
+    import pandas as pd
+    import numpy as np
+    import plotly.graph_objs as go
+
+    # Animation mode: embedding is a sequence of 2D arrays (frames)
+    if animated and embedding is not None and hasattr(embedding, '__len__') and len(embedding) >= 1:
+        n_frames = min(400, len(embedding))
+        frames = []
+        # Use y for all frames (assume y is static)
+        point_indices = np.arange(len(y))
+        # Initial frame
+        df0 = pd.DataFrame({
+            'x': embedding[0][:, 0],
+            'y': embedding[0][:, 1],
+            'color': y.astype(str),
+            'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+            'point_index': point_indices,
+            'label': y.astype(str)
+        })
+        # Use a consistent color palette for both px.scatter and go.Scatter
+        color_palette = px.colors.qualitative.Light24
+
+        # Compute global min/max for all frames for fixed axes
+        all_x = np.concatenate([emb[:, 0] for emb in embedding[:n_frames]])
+        all_y = np.concatenate([emb[:, 1] for emb in embedding[:n_frames]])
+        x_range = [float(all_x.min()), float(all_x.max())]
+        y_range = [float(all_y.min()), float(all_y.max())]
+
+        fig = px.scatter(
+            df0,
+            x='x',
+            y='y',
+            color='color',
+            custom_data=['point_index', 'label'],
+            title=title,
+            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+            color_discrete_sequence=color_palette,
+            range_x=x_range,
+            range_y=y_range
+        )
+        # Build frames
+        for i in range(n_frames):
+            dfi = pd.DataFrame({
+                'x': embedding[i][:, 0],
+                'y': embedding[i][:, 1],
+                'color': y.astype(str),
+                'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+                'point_index': point_indices,
+                'label': y.astype(str)
+            })
+            scatter = go.Scatter(
+                x=dfi['x'],
+                y=dfi['y'],
+                mode='markers',
+                marker=dict(
+                    color=dfi['color_num'],
+                    colorscale=color_palette,
+                    cmin=0,
+                    cmax=len(color_palette)-1
+                ),
+                customdata=np.stack([dfi['point_index'], dfi['label']], axis=-1),
+                showlegend=False,
+                hovertemplate="Class: %{customdata[1]}<br>Index: %{customdata[0]}<br>X: %{x}<br>Y: %{y}<extra></extra>"
+            )
+            frames.append(go.Frame(data=[scatter], name=str(i)))
+        fig.frames = frames
+
+        # Add animation slider
+        sliders = [{
+            "steps": [
+                {
+                    "args": [
+                        [str(k)],
+                        {
+                            "frame": {"duration": 0, "redraw": True},
+                            "mode": "immediate",
+                            "transition": {"duration": 0}
+                        }
+                    ],
+                    "label": str(k),
+                    "method": "animate"
+                } for k in range(n_frames)
+            ],
+            "transition": {"duration": 0},
+            "x": 0.1,
+            "y": 0,
+            "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
+            "len": 0.9
+        }]
+        fig.update_layout(
+            updatemenus=[{
+                "type": "buttons",
+                "buttons": [
+                    {
+                        "args": [
+                            None,
+                            {
+                                "frame": {"duration": 50, "redraw": True},
+                                "fromcurrent": True,
+                                "transition": {"duration": 0}
+                            }
+                        ],
+                        "label": "Play",
+                        "method": "animate"
+                    },
+                    {
+                        "args": [
+                            [None],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "mode": "immediate",
+                                "transition": {"duration": 0}
+                            }
+                        ],
+                        "label": "Pause",
+                        "method": "animate"
+                    }
+                ],
+                "direction": "left",
+                "pad": {"r": 10, "t": 70},
+                "showactive": False,
+                "x": 0.1,
+                "y": 0,
+                "xanchor": "right",
+                "yanchor": "top"
+            }],
+            sliders=sliders,
+            margin=dict(l=5, r=5, t=50, b=5)
+        )
+        if is_thumbnail:
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                xaxis=dict(showticklabels=False, visible=False),
+                yaxis=dict(showticklabels=False, visible=False),
+                showlegend=False,
+                hovermode=False
+            )
+        return fig
+
+    # Non-animated mode (single embedding)
     if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
         return px.scatter(title=f"{title} (no data)")
 
-    # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
-
-    # Create a DataFrame with all the data
-    import pandas as pd
     df = pd.DataFrame({
         'x': embedding[:, 0],
         'y': embedding[:, 1],
@@ -258,7 +394,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False):
         'label': y.astype(str)
     })
 
-    # Create the figure with the DataFrame
     fig = px.scatter(
         df,
         x='x',
@@ -313,7 +448,7 @@ def register_callbacks(app):
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data'),
-        Input('dist-dropdown', 'value'),
+        Input('dist-dropdown', 'value')
     )
     def update_graphs(dataset_name, recalculate_flag, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings, distance):
         if not dataset_name:
@@ -390,6 +525,9 @@ def register_callbacks(app):
             tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
         umap_emb = get_embedding('umap', compute_umap, X, distance)
 
+        # --- Use Plotly animation for TRIMAP embedding ---
+        # Only animate for TRIMAP, use static for UMAP and TSNE
+
         # Create figures
         # If distance is haversine and method is tsne, force fallback to trimap
         if distance == 'haversine' and method == 'tsne':
@@ -400,16 +538,36 @@ def register_callbacks(app):
                 "Class",
                 X
             )
+        elif method == 'trimap':
+            # Use animated Plotly figure for TRIMAP
+            main_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, animated=True)
+        elif method == 'tsne':
+            main_fig = create_figure(
+                tsne_emb,
+                y,
+                "TSNE Embedding of {}".format(dataset_name),
+                "Class",
+                X
+            )
+        elif method == 'umap':
+            main_fig = create_figure(
+                umap_emb,
+                y,
+                "UMAP Embedding of {}".format(dataset_name),
+                "Class",
+                X
+            )
         else:
             main_fig = create_figure(
-                trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
+                trimap_emb,
                 y,
-                f"{method.upper()} Embedding of {dataset_name}",
+                f"TRIMAP Embedding of {dataset_name}",
                 "Class",
                 X
             )
 
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True)
+        # Use the last frame (frame -1) for the thumbnail (static)
+        trimap_fig = create_figure(trimap_emb[-1], y, "TRIMAP", "Class", X, is_thumbnail=True) if (trimap_emb is not None and hasattr(trimap_emb, '__len__') and len(trimap_emb) > 399) else create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True)
         if distance == 'haversine':
             tsne_fig = create_figure(None, y, "t-SNE (disabled for haversine)", "Class", X, is_thumbnail=True)
         else:
