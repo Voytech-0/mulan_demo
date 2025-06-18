@@ -2,6 +2,7 @@ import jax.random as random
 from sklearn import datasets
 from sklearn.manifold import TSNE
 import plotly.express as px
+import plotly.graph_objects as go
 import dash
 from dash import dcc, html, Input, Output, callback_context, State, callback
 import numpy as np
@@ -38,6 +39,9 @@ from .settings import (
     get_image_style, get_generative_placeholder_style, get_no_image_message_style,
     EMPTY_METADATA_STYLE, TABLE_STYLE, CELL_STYLE, CELL_STYLE_RIGHT, IMAGE_FIGURE_SIZE
 )
+
+# Simple cache for generated images
+_image_cache = {}
 
 def load_fashion_mnist():
     """Load Fashion MNIST dataset."""
@@ -216,6 +220,13 @@ def compute_umap(X):
 
 def create_datapoint_image(data_point, size=(20, 20)):
     """Create a small image representation of a datapoint."""
+    # Create a cache key based on the data point and size
+    cache_key = (hash(data_point.tobytes()), size)
+    
+    # Check if we have this image cached
+    if cache_key in _image_cache:
+        return _image_cache[cache_key]
+    
     # Normalize the data point to 0-1 range
     normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
     
@@ -223,24 +234,46 @@ def create_datapoint_image(data_point, size=(20, 20)):
     side_length = int(np.sqrt(len(normalized)))
     if side_length * side_length == len(normalized):
         img_data = normalized.reshape(side_length, side_length)
+        # Use grayscale colormap for image datasets
+        cmap = 'gray'
+        # Adjust figure size based on the actual image dimensions
+        if side_length == 8:  # Digits dataset
+            fig_size = (size[0]/50, size[1]/50)  # Smaller for 8x8
+        else:  # MNIST/Fashion MNIST/Elephant (28x28)
+            fig_size = (size[0]/25, size[1]/25)  # Larger for 28x28
     else:
         # If not a perfect square, create a rectangular image
         img_data = normalized.reshape(-1, 8)  # Arbitrary width of 8
+        # Use viridis for non-image datasets
+        cmap = 'viridis'
+        fig_size = (size[0]/100, size[1]/100)
     
-    # Create the image
-    plt.figure(figsize=(size[0]/100, size[1]/100), dpi=100)
-    plt.imshow(img_data, cmap='viridis')
+    # Create the image with higher DPI for sharper pixels
+    plt.figure(figsize=fig_size, dpi=300)  # Increased DPI from 100 to 300
+    plt.imshow(img_data, cmap=cmap, interpolation='nearest')  # Use nearest neighbor interpolation
     plt.axis('off')
     
     # Convert to base64
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
     plt.close()
     buf.seek(0)
     img_str = base64.b64encode(buf.read()).decode()
-    return f"data:image/png;base64,{img_str}"
+    img_data_url = f"data:image/png;base64,{img_str}"
+    
+    # Cache the result
+    _image_cache[cache_key] = img_data_url
+    
+    # Limit cache size to prevent memory issues
+    if len(_image_cache) > 1000:
+        # Remove oldest entries (simple FIFO)
+        oldest_keys = list(_image_cache.keys())[:100]
+        for key in oldest_keys:
+            del _image_cache[key]
+    
+    return img_data_url
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False):
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False):
     if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
         return px.scatter(title=f"{title} (no data)")
     
@@ -257,16 +290,93 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False):
         'label': y.astype(str)
     })
     
-    # Create the figure with the DataFrame
-    fig = px.scatter(
-        df,
-        x='x',
-        y='y',
-        color='color',
-        custom_data=['point_index', 'label'],
-        title=title,
-        labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
-    )
+    # Check if we should show images and if we have image data
+    if show_images and X is not None and len(X) > 0:
+        # For image datasets, create image representations
+        if len(X[0]) in [64, 784]:  # Digits (8x8=64) or MNIST/Fashion MNIST (28x28=784)
+            # Limit the number of images to display for performance
+            max_images = 100 # if not is_thumbnail else 200  # Show more images
+            
+            if len(X) > max_images:
+                # Sample points evenly across the dataset
+                step = len(X) // max_images
+                indices_to_show = list(range(0, len(X), step))[:max_images]
+                print(f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show)/len(X)*100:.1f}%)")
+            else:
+                indices_to_show = list(range(len(X)))
+                print(f"Showing all {len(indices_to_show)} images")
+            
+            # Create image representations for selected points only
+            images = []
+            for i in indices_to_show:
+                img_str = create_datapoint_image(X[i], size=(15, 15))
+                images.append(img_str)
+            
+            # Create the figure with adaptive scatter points
+            fig = px.scatter(
+                df,
+                x='x',
+                y='y',
+                color='color',
+                custom_data=['point_index', 'label'],
+                title=title,
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+            )
+            
+            # Update scatter points to have adaptive sizing
+            fig.update_traces(
+                marker=dict(
+                    size=15,  # Base size that will scale with zoom
+                    sizeref=1,  # Reference size for scaling
+                    sizemin=5,  # Minimum size when zoomed out
+                    sizemode='diameter'
+                ),
+                selector=dict(type='scatter')
+            )
+            
+            # Add images as layout images on top
+            for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
+                x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
+                # Calculate dynamic size based on plot range
+                x_range = df['x'].max() - df['x'].min()
+                y_range = df['y'].max() - df['y'].min()
+                base_size = max(x_range, y_range) * 0.04
+                
+                fig.add_layout_image(
+                    dict(
+                        source=img_str,
+                        xref="x",
+                        yref="y",
+                        x=x,
+                        y=y,
+                        sizex=base_size,
+                        sizey=base_size,
+                        xanchor="center",
+                        yanchor="middle"
+                    )
+                )
+        else:
+            # For non-image datasets, fall back to regular scatter plot
+            fig = px.scatter(
+                df,
+                x='x',
+                y='y',
+                color='color',
+                custom_data=['point_index', 'label'],
+                title=title,
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+            )
+    else:
+        # Create the figure with regular dots
+        fig = px.scatter(
+            df,
+            x='x',
+            y='y',
+            color='color',
+            custom_data=['point_index', 'label'],
+            title=title,
+            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+        )
     
     if is_thumbnail:
         fig.update_layout(
@@ -307,14 +417,19 @@ def register_callbacks(app):
         Output('umap-timing', 'children'),
         Input('dataset-dropdown', 'value'),
         Input('recalculate-switch', 'value'),
+        Input('dots-images-switch', 'value'),
         Input('trimap-thumbnail-click', 'n_clicks'),
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data')
     )
-    def update_graphs(dataset_name, recalculate_flag, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings):
+    def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings):
         if not dataset_name:
             return [px.scatter(title="No dataset selected")] * 3 + [""] * 7
+
+        # Handle None value for show_images (default to False)
+        if show_images is None:
+            show_images = False
 
         # Get the dataset
         X, y, data = get_dataset(dataset_name)
@@ -397,12 +512,13 @@ def register_callbacks(app):
             y,
             f"{method.upper()} Embedding of {dataset_name}",
             "Class",
-            X
+            X,
+            show_images=show_images
         )
         
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True)
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False)
         
         # UMAP warning
         umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
