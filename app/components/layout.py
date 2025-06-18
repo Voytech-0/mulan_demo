@@ -1,6 +1,8 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
+from dash.dependencies import Input, Output
+
 def create_layout(app):
     return html.Div([
         dcc.Store(id="distance-measure-store", data="euclidean"),
@@ -221,7 +223,9 @@ def create_layout(app):
                                         style={'height': '13vh'},
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
-                                ]
+                                ],
+                                n_clicks=0,
+                                **{"data-disabled": True}  # This will be toggled by a callback
                             ),
                             html.Div(
                                 id='umap-thumbnail-click',

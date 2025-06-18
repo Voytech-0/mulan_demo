@@ -183,6 +183,9 @@ def compute_trimap(X, distance):
 
 
 def compute_tsne(X, distance):
+    if distance == 'haversine':
+        print("t-SNE is not supported for haversine distance. Returning None.")
+        return None, 0
     start_time = time.time()
     with numba_global_lock:
         print('calculating tsne')
@@ -373,20 +376,36 @@ def register_callbacks(app):
 
         # Get embeddings for all methods
         trimap_emb = get_embedding('trimap', compute_trimap, X, distance)
-        tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
+        if distance == 'haversine':
+            tsne_emb = None
+        else:
+            tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
         umap_emb = get_embedding('umap', compute_umap, X, distance)
 
         # Create figures
-        main_fig = create_figure(
-            trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
-            y,
-            f"{method.upper()} Embedding of {dataset_name}",
-            "Class",
-            X
-        )
+        # If distance is haversine and method is tsne, force fallback to trimap
+        if distance == 'haversine' and method == 'tsne':
+            main_fig = create_figure(
+                trimap_emb,
+                y,
+                f"TRIMAP Embedding of {dataset_name} (t-SNE disabled for haversine)",
+                "Class",
+                X
+            )
+        else:
+            main_fig = create_figure(
+                trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
+                y,
+                f"{method.upper()} Embedding of {dataset_name}",
+                "Class",
+                X
+            )
 
         trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True)
+        if distance == 'haversine':
+            tsne_fig = create_figure(None, y, "t-SNE (disabled for haversine)", "Class", X, is_thumbnail=True)
+        else:
+            tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True)
         umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True)
 
         # Metadata display
@@ -395,10 +414,12 @@ def register_callbacks(app):
         # Update cache
         cached_embeddings[dataset_name] = {
             'trimap': trimap_emb.tolist() if trimap_emb is not None else None,
-            'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
+            'tsne': tsne_emb.tolist() if tsne_emb is not None else None if distance != 'haversine' else None,
             'umap': umap_emb.tolist() if umap_emb is not None else None
         }
 
+        # If distance is haversine, show t-SNE timing as "Disabled"
+        tsne_time_display = f"t-SNE: Disabled for haversine" if distance == 'haversine' else f"t-SNE: {tsne_time:.2f}s"
         return (
             main_fig,
             trimap_fig,
@@ -407,7 +428,7 @@ def register_callbacks(app):
             metadata,
             cached_embeddings,
             f"TRIMAP: {trimap_time:.2f}s",
-            f"t-SNE: {tsne_time:.2f}s",
+            tsne_time_display,
             f"UMAP: {umap_time:.2f}s"
         )
 
@@ -639,16 +660,19 @@ def register_callbacks(app):
         Output('tsne-thumbnail-click', 'className'),
         Output('umap-thumbnail-click', 'className'),
         Output('trimap-thumbnail-click', 'className'),
+        Output('tsne-thumbnail-click', 'style'),
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         Input('trimap-thumbnail-click', 'n_clicks'),
+        Input('dist-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def select_method_button(tsne_n_clicks, umap_n_clicks, trimap_n_clicks):
+    def select_method_button(tsne_n_clicks, umap_n_clicks, trimap_n_clicks, distance):
         ctx = callback_context
         if not ctx.triggered:
             # Default state, TRIMAP is initially selected
-            return "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3 selected"
+            tsne_style = {'pointer-events': 'none', 'opacity': 0.5} if distance == 'haversine' else {}
+            return "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3 selected", tsne_style
 
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
@@ -656,14 +680,15 @@ def register_callbacks(app):
         umap_class = "method-button-container thumbnail-button mb-3"
         trimap_class = "method-button-container thumbnail-button mb-3"
 
-        if button_id == 'tsne-thumbnail-click':
+        if button_id == 'tsne-thumbnail-click' and distance != 'haversine':
             tsne_class = "method-button-container thumbnail-button mb-3 selected"
         elif button_id == 'umap-thumbnail-click':
             umap_class = "method-button-container thumbnail-button mb-3 selected"
         elif button_id == 'trimap-thumbnail-click':
             trimap_class = "method-button-container thumbnail-button mb-3 selected"
 
-        return tsne_class, umap_class, trimap_class
+        tsne_style = {'pointer-events': 'none', 'opacity': 0.5} if distance == 'haversine' else {}
+        return tsne_class, umap_class, trimap_class, tsne_style
 
     # Callback for Upload Custom Dataset dropdown option
     @app.callback(
