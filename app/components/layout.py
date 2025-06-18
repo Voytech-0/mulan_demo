@@ -84,6 +84,21 @@ def create_layout(app):
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
+                # Top-left corner buttons
+                dbc.Row([
+                    dbc.Col(dbc.Button(
+                        [html.I(className="fas fa-plus me-2"), "Add New Datapoint"],
+                        id="add-datapoint-btn",
+                        color="primary",
+                        className="me-2 control-button"
+                    ), width="auto"),
+                    dbc.Col(dbc.Button(
+                        [html.I(className="fas fa-th-large me-2"), "Full Grid"],
+                        id="full-grid-btn",
+                        color="secondary",
+                        className="control-button"
+                    ), width="auto")
+                ], className="mb-3"),
                 # Image display container
                 html.Div(
                     id='image-display',

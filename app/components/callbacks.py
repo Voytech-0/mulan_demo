@@ -130,21 +130,21 @@ def register_callbacks(app):
         
         # Create figures
         main_fig = create_figure(
-            embeddings[selected_method], y, 
+            embeddings[selected_method], y[:embeddings[selected_method].shape[0]], 
             f"{selected_method.upper()} - {dataset_name}", 
-            "Class", X, False, show_images
+            "Class", X, False, show_images, class_names=data.target_names
         )
         
         trimap_fig = create_figure(
-            embeddings['trimap'], y, "TRIMAP", "Class", X, True, False
+            embeddings['trimap'], y[:embeddings['trimap'].shape[0]], "TRIMAP", "Class", X, True, False, class_names=data.target_names
         )
         
         tsne_fig = create_figure(
-            embeddings['tsne'], y, "t-SNE", "Class", X, True, False
+            embeddings['tsne'], y[:embeddings['tsne'].shape[0]], "t-SNE", "Class", X, True, False, class_names=data.target_names
         )
         
         umap_fig = create_figure(
-            embeddings['umap'], y, "UMAP", "Class", X, True, False
+            embeddings['umap'], y[:embeddings['umap'].shape[0]], "UMAP", "Class", X, True, False, class_names=data.target_names
         )
         
         # Create metadata display

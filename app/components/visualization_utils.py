@@ -61,7 +61,7 @@ def create_datapoint_image(data_point, size=(20, 20)):
         return ""
 
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False):
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None):
     """
     Create a Plotly figure for embedding visualization.
     
@@ -128,11 +128,12 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         
         for i, label in enumerate(unique_labels):
             mask = y == label
+            display_label = class_names[label]
             fig.add_trace(go.Scatter(
                 x=embedding[mask, 0],
                 y=embedding[mask, 1],
                 mode='markers',
-                name=str(label),
+                name=display_label,
                 marker=dict(
                     size=6 if is_thumbnail else 8,
                     color=colors[i % len(colors)],
@@ -141,7 +142,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 hovertemplate=f'<b>{label_name}:</b> %{{text}}<br>' +
                              '<b>X:</b> %{x}<br>' +
                              '<b>Y:</b> %{y}<extra></extra>',
-                text=[str(label)] * np.sum(mask)
+                text=[display_label] * np.sum(mask)
             ))
     
     # Update layout
