@@ -3,51 +3,42 @@ Centralized settings configuration for the MULAN demo app.
 All UI dimensions, heights, and styling parameters are defined here.
 """
 
-# Image display settings
+# =============================================================================
+# LAYOUT DIMENSIONS
+# =============================================================================
+
+# Container heights
+IMAGE_DISPLAY_CONTAINER_HEIGHT = "56vh"
+METADATA_DISPLAY_HEIGHT = "20vh"
+
+# Component heights
 IMAGE_HEIGHT = "30vh"
 IMAGE_MAX_HEIGHT = "30vh"
 IMAGE_MIN_HEIGHT = "4vh"
-IMAGE_PADDING = "0.5rem"
-
-# Container heights
 COORDINATES_HEIGHT = "18vh"
 METADATA_HEIGHT = "4vh"
 NO_IMAGE_HEIGHT = "4vh"
 GENERATIVE_PLACEHOLDER_HEIGHT = "30vh"
 
-# Image figure settings
-IMAGE_FIGURE_SIZE = (6, 6)
+# =============================================================================
+# STYLING CONSTANTS
+# =============================================================================
 
-# Layout container settings
-IMAGE_DISPLAY_CONTAINER_HEIGHT = "56vh"
-METADATA_DISPLAY_HEIGHT = "20vh"
-
-# Styling constants
+# Colors
 BORDER_COLOR = "#dee2e6"
 BACKGROUND_COLOR = "#2c3e50"
 PLACEHOLDER_BACKGROUND = "#2c3e50"
 PLACEHOLDER_BORDER = "#666"
 TEXT_COLOR = "#666"
 
-# Padding and spacing
+# Spacing
 STANDARD_PADDING = "0.5rem"
 STANDARD_MARGIN = "0.5rem"
+IMAGE_PADDING = "0.5rem"
 
-# Table styling
-TABLE_STYLE = {
-    'width': '100%', 
-    'border-collapse': 'collapse'
-}
-
-CELL_STYLE = {
-    'text-align': 'left', 
-    'padding': '8px'
-}
-
-CELL_STYLE_RIGHT = {
-    'text-align': 'right', 
-    'padding': '8px'
-}
+# =============================================================================
+# COMPONENT STYLES
+# =============================================================================
 
 # Image styles
 SELECTED_IMAGE_STYLE = {
@@ -91,28 +82,51 @@ METADATA_DISPLAY_STYLE = {
     'padding': STANDARD_PADDING
 }
 
-# Empty metadata message style
+# Table styles
+TABLE_STYLE = {
+    'width': '100%', 
+    'border-collapse': 'collapse'
+}
+
+CELL_STYLE = {
+    'text-align': 'left', 
+    'padding': '8px'
+}
+
+CELL_STYLE_RIGHT = {
+    'text-align': 'right', 
+    'padding': '8px'
+}
+
+# Message styles
 EMPTY_METADATA_STYLE = {
     'text-align': 'center', 
     'color': TEXT_COLOR, 
     'padding': '1rem'
 }
 
-# Function to get image style for callbacks
+# =============================================================================
+# FIGURE SETTINGS
+# =============================================================================
+
+IMAGE_FIGURE_SIZE = (6, 6)
+
+# =============================================================================
+# STYLE HELPER FUNCTIONS
+# =============================================================================
+
 def get_image_style(display_type='block'):
     """Get image style with specified display type."""
     style = SELECTED_IMAGE_STYLE.copy()
     style['display'] = display_type
     return style
 
-# Function to get generative placeholder style for callbacks
 def get_generative_placeholder_style(display_type='block'):
     """Get generative placeholder style with specified display type."""
     style = GENERATIVE_PLACEHOLDER_STYLE.copy()
     style['display'] = display_type
     return style
 
-# Function to get no image message style for callbacks
 def get_no_image_message_style(display_type='block'):
     """Get no image message style with specified display type."""
     style = NO_IMAGE_MESSAGE_STYLE.copy()
