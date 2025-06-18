@@ -78,7 +78,7 @@ def register_callbacks(app):
             X, y, data = get_dataset(dataset_name)
         except Exception as e:
             error_fig = create_figure(None, [], f"Error loading dataset: {str(e)}", "Label")
-            return [error_fig] * 3 + ["", "", {}] + [""] * 3
+            return [error_fig] * 4 + ["Error loading dataset", "", {}, "", "", ""] 
         
         # Initialize cache if needed
         if cached_embeddings is None:
@@ -388,3 +388,44 @@ def register_callbacks(app):
         # This is a placeholder for image size adjustment on zoom
         # In a full implementation, you would adjust image sizes based on zoom level
         return figure
+    
+    
+    @app.callback(
+        Output("full-grid-container", "style"),
+        Input("full-grid-btn", "n_clicks"),
+        State("full-grid-container", "style"),
+        prevent_initial_call=True
+    )
+    def toggle_full_grid(n_clicks, current_style):
+        if current_style and current_style.get("display") == "block":
+            return {**current_style, "display": "none"}
+        return {**current_style, "display": "block"}
+
+    from dash import html
+    from .dataset_loader import get_dataset
+    from .visualization_utils import create_datapoint_image
+    from .feature_config import IMAGE_ONLY_DATASETS
+
+    @app.callback(
+        Output("full-grid-container", "children"),
+        Input("full-grid-btn", "n_clicks"),
+        State("dataset-dropdown", "value"),
+        prevent_initial_call=True
+    )
+    def populate_full_grid(n_clicks, dataset_name):
+        if not dataset_name or dataset_name not in IMAGE_ONLY_DATASETS:
+            return html.Div("Full grid is only available for image datasets.", style={"color": "white"})
+
+        X, y, _ = get_dataset(dataset_name)
+
+        # Limit to 100 images for performance
+        max_images = min(len(X), 100)
+
+        images = []
+        for i in range(max_images):
+            img_src = create_datapoint_image(X[i])
+            if img_src:
+                images.append(html.Img(src=img_src, style={"width": "60px", "height": "60px", "margin": "4px"}))
+
+        return html.Div(images, style={"display": "flex", "flex-wrap": "wrap"})
+

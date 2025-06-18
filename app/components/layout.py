@@ -130,6 +130,22 @@ def create_layout(app):
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem'}
                 ),
 
+                # Full Grid container (hidden by default)
+                html.Div(
+                    id='full-grid-container',
+                    children=[],  # Will be filled by callback
+                    style={
+                        'display': 'none',
+                        'border': f'1px solid {BORDER_COLOR}',
+                        'padding': '1rem',
+                        'margin-bottom': '1rem',
+                        'height': '30vh',
+                        'overflowY': 'scroll',
+                        'backgroundColor': BACKGROUND_COLOR,
+                        'color': 'white'
+                    }
+                ),
+
                 # Dataset selection controls
                 dbc.Row([
                     dbc.Col(html.Label("Pick a Dataset :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),

@@ -23,8 +23,8 @@ class DatasetWrapper:
     def __init__(self, data, target, target_names=None, feature_names=None):
         self.data = data
         self.target = target
-        self.target_names = target_names or [str(i) for i in range(len(np.unique(target)))]
-        self.feature_names = feature_names or [f'Feature_{i}' for i in range(data.shape[1])]
+        self.target_names = (target_names if target_names is not None else [str(i) for i in range(len(np.unique(target)))])
+        self.feature_names = (feature_names if feature_names is not None else [f'Feature_{i}' for i in range(data.shape[1])])
 
 
 def load_fashion_mnist():
