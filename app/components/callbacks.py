@@ -21,16 +21,8 @@ from .embedding_storage import save_embedding, load_embedding, embedding_exists
 
 # Import TRIMAP from local package
 from google_research_trimap.trimap import trimap
+import umap.umap_ as umap
 
-# Try to import UMAP, if available
-umap_available = False
-umap_lib = None  # Use a distinct name for the imported module
-try:
-    import umap as umap_lib  # Import as umap_lib
-
-    umap_available = True
-except ImportError:
-    pass  # umap_lib remains None
 
 
 def load_fashion_mnist():
@@ -167,7 +159,8 @@ def get_dataset(name):
     return X, y, data
 
 
-def compute_trimap(X, key):
+def compute_trimap(X, distance):
+    key = random.PRNGKey(0)
     start_time = time.time()
     with numba_global_lock:
         print('Starting TRIMAP calculation...')
@@ -179,7 +172,7 @@ def compute_trimap(X, key):
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False)
+        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False, output_metric=distance, auto_diff=False)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
 
@@ -189,23 +182,21 @@ def compute_trimap(X, key):
     return result, total_time
 
 
-def compute_tsne(X):
+def compute_tsne(X, distance):
     start_time = time.time()
     with numba_global_lock:
         print('calculating tsne')
-        emb = TSNE(n_components=2, random_state=42).fit_transform(X)
+        emb = TSNE(n_components=2, random_state=42, metric=distance).fit_transform(X)
         result = np.array(emb)
         print('tsne calculated')
     return result, time.time() - start_time
 
 
-def compute_umap(X):
-    if not umap_available or umap_lib is None:
-        return None, 0
+def compute_umap(X, distance):
     start_time = time.time()
     with numba_global_lock:
         print('calculating umap')
-        reducer = umap_lib.UMAP(n_components=2, random_state=42)
+        reducer = umap.UMAP(n_components=2, random_state=42, output_metric=distance)
         emb = reducer.fit_transform(X)
         result = np.array(emb)
         print('umap calculated')
@@ -287,7 +278,7 @@ def create_metadata_display(dataset_name, data):
     return html.Div([
         html.H4(f"Dataset: {dataset_name}"),
         # information abou the dataset
-        # html.P(f"{}   
+        # html.P(f"{}
         html.P(f"Number of samples: {data.data.shape[0]}"),
         html.P(f"Number of features: {data.data.shape[1]}"),
         html.P(f"Number of classes: {len(np.unique(data.target))}")
@@ -300,7 +291,6 @@ def register_callbacks(app):
         Output('trimap-thumbnail', 'figure'),
         Output('tsne-thumbnail', 'figure'),
         Output('umap-thumbnail', 'figure'),
-        Output('umap-warning', 'children'),
         Output('metadata-display', 'children'),
         Output('embedding-cache', 'data'),
         Output('trimap-timing', 'children'),
@@ -311,9 +301,10 @@ def register_callbacks(app):
         Input('trimap-thumbnail-click', 'n_clicks'),
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
-        State('embedding-cache', 'data')
+        State('embedding-cache', 'data'),
+        Input('dist-dropdown', 'value'),
     )
-    def update_graphs(dataset_name, recalculate_flag, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings):
+    def update_graphs(dataset_name, recalculate_flag, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings, distance):
         if not dataset_name:
             return [px.scatter(title="No dataset selected")] * 3 + [""] * 7
 
@@ -349,8 +340,8 @@ def register_callbacks(app):
             nonlocal trimap_time, tsne_time, umap_time
 
             # Check if we should use saved embeddings
-            if not recalculate_flag and embedding_exists(dataset_name, method_name):
-                embedding, metadata = load_embedding(dataset_name, method_name)
+            if not recalculate_flag and embedding_exists(dataset_name, method_name, distance):
+                embedding, metadata = load_embedding(dataset_name, method_name, distance)
                 if embedding is not None:
                     # Update timing from metadata if available
                     if metadata and 'time' in metadata:
@@ -368,7 +359,7 @@ def register_callbacks(app):
             # Save the embedding if computation was successful
             if embedding is not None:
                 metadata = {'time': compute_time}
-                save_embedding(dataset_name, method_name, embedding, metadata)
+                save_embedding(dataset_name, method_name, embedding, distance, metadata)
 
                 # Update timing
                 if method_name == 'trimap':
@@ -381,10 +372,9 @@ def register_callbacks(app):
             return embedding
 
         # Get embeddings for all methods
-        key = random.PRNGKey(0)
-        trimap_emb = get_embedding('trimap', compute_trimap, X, key)
-        tsne_emb = get_embedding('tsne', compute_tsne, X)
-        umap_emb = get_embedding('umap', compute_umap, X)
+        trimap_emb = get_embedding('trimap', compute_trimap, X, distance)
+        tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
+        umap_emb = get_embedding('umap', compute_umap, X, distance)
 
         # Create figures
         main_fig = create_figure(
@@ -398,9 +388,6 @@ def register_callbacks(app):
         trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True)
         tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True)
         umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True)
-
-        # UMAP warning
-        umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
 
         # Metadata display
         metadata = create_metadata_display(dataset_name, data)
@@ -417,7 +404,6 @@ def register_callbacks(app):
             trimap_fig,
             tsne_fig,
             umap_fig,
-            umap_warning,
             metadata,
             cached_embeddings,
             f"TRIMAP: {trimap_time:.2f}s",
@@ -613,30 +599,15 @@ def register_callbacks(app):
         else:
             return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"]
 
-    # Distance Measure Buttons (Mutually Exclusive)
+    # Distance Measure Dropdown (Primary selector)
     @app.callback(
-        [Output(f'dist-opt{i}-btn', 'className') for i in range(1, 3)] + [Output('dist-upload-btn', 'className')],
-        [Input(f'dist-opt{i}-btn', 'n_clicks') for i in range(1, 3)] + [Input('dist-upload-btn', 'n_clicks')],
+        Output('distance-measure-store', 'data'),
+        Input('dist-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def select_distance_measure(*n_clicks):
-        ctx = callback_context
-        if not ctx.triggered:
-            # Default state, make the first one selected
-            classes = ['control-button'] * 3
-            classes[0] = 'control-button selected'
-            return classes
-
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        classes = ['control-button'] * 3
-
-        if button_id == 'dist-opt1-btn':
-            classes[0] = 'control-button selected'
-        elif button_id == 'dist-opt2-btn':
-            classes[1] = 'control-button selected'
-        elif button_id == 'dist-upload-btn':
-            classes[2] = 'control-button selected'
-        return classes
+    def select_distance_measure_dropdown(value):
+        print(f"Distance measure selected from dropdown: {value}")
+        return value
 
     # Layer Buttons (Mutually Exclusive)
     @app.callback(

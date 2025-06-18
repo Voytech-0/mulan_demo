@@ -3,6 +3,7 @@ import dash_bootstrap_components as dbc
 
 def create_layout(app):
     return html.Div([
+        dcc.Store(id="distance-measure-store", data="euclidean"),
         html.H1("Manifold Learning Visualizations", className="text-center mb-4"),
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
@@ -27,7 +28,7 @@ def create_layout(app):
                                     html.Div(id='coordinates-display', style={'height': '24vh', 'overflow-y': 'auto', 'border': '1px solid #dee2e6', 'padding': '0.5rem'})
                                 ])
                             ], width=6),
-        
+
                             dbc.Col([
                                 html.H5("Metadata", className="text-center mb-2"),
                                 html.Div(id='point-metadata', style={'height': '47vh', 'overflow-y': 'auto', 'border': '1px solid #dee2e6', 'padding': '0.5rem'})
@@ -65,7 +66,7 @@ def create_layout(app):
                         className="ms-2 control-button"
                     ), width=4)
                 ], className="mb-3 align-items-center"),
-                
+
                 dbc.Row([
                     dbc.Col(html.Label("Distance measure :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
                     dbc.Col(dcc.Dropdown(
@@ -82,11 +83,7 @@ def create_layout(app):
                         persistence=True,
                         persistence_type='session'
                     ), width=5),
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-upload me-2"), "Custom distance"],
-                        id="custom-distance-btn",
-                        className="ms-2 control-button"
-                    ), width=4)
+
                 ], className="mb-3 align-items-center"),
                 dbc.Row([
                     dbc.Col(html.Label("Image space :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
@@ -143,9 +140,9 @@ def create_layout(app):
                             className="mb-3 w-100 control-button"
                         ), width=12),
                 dcc.Store(id='embedding-cache', data={}),
-                
+
             ], width=4),
-            
+
 
             # Right Column (8/12 width): Main Graph and Thumbnails
             dbc.Col([
