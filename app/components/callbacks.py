@@ -20,6 +20,8 @@ from io import BytesIO
 from .embedding_storage import save_embedding, load_embedding, embedding_exists
 
 # Import TRIMAP from local package
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'google_research_trimap'))
 from google_research_trimap.trimap import trimap
 
 # Try to import UMAP, if available
@@ -30,6 +32,12 @@ try:
     umap_available = True
 except ImportError:
     pass # umap_lib remains None
+
+from mulan_demo.app.components.feature_config import DATASET_FEATURES, IMAGE_ONLY_DATASETS
+from .settings import (
+    get_image_style, get_generative_placeholder_style, get_no_image_message_style,
+    EMPTY_METADATA_STYLE, TABLE_STYLE, CELL_STYLE, CELL_STYLE_RIGHT, IMAGE_FIGURE_SIZE
+)
 
 def load_fashion_mnist():
     """Load Fashion MNIST dataset."""
@@ -143,14 +151,25 @@ DATASET_LOADERS = {
 # Single global lock for computations
 numba_global_lock = threading.Lock()
 
-from mulan_demo.app.components.feature_config import DATASET_FEATURES
-
 def get_dataset(name):
     with numba_global_lock:
-        loader = DATASET_LOADERS[name]
-        data = loader()
-        X = data.data
-        y = data.target
+        if name == 'custom_upload':
+            # Return a placeholder dataset for custom upload
+            # This will be handled by the upload functionality later
+            X = np.random.rand(10, 4)  # Placeholder data
+            y = np.zeros(10)  # Placeholder labels
+            class Dataset:
+                def __init__(self, data, target):
+                    self.data = data
+                    self.target = target
+                    self.target_names = ['Custom']
+                    self.feature_names = [f'Feature {i}' for i in range(data.shape[1])]
+            data = Dataset(X, y)
+        else:
+            loader = DATASET_LOADERS[name]
+            data = loader()
+            X = data.data
+            y = data.target
     return X, y, data
 
 def compute_trimap(X, key):
@@ -329,36 +348,42 @@ def register_callbacks(app):
             nonlocal trimap_time, tsne_time, umap_time
             
             # Check if we should use saved embeddings
-            if not recalculate_flag and embedding_exists(dataset_name, method_name):
-                embedding, metadata = load_embedding(dataset_name, method_name)
-                if embedding is not None:
-                    # Update timing from metadata if available
-                    if metadata and 'time' in metadata:
-                        if method_name == 'trimap':
-                            trimap_time = metadata['time']
-                        elif method_name == 'tsne':
-                            tsne_time = metadata['time']
-                        elif method_name == 'umap':
-                            umap_time = metadata['time']
-                    return embedding
+            if not recalculate_flag:
+                if embedding_exists(dataset_name, method_name):
+                    embedding, metadata = load_embedding(dataset_name, method_name)
+                    if embedding is not None:
+                        # Update timing from metadata if available
+                        if metadata and 'time' in metadata:
+                            if method_name == 'trimap':
+                                trimap_time = metadata['time']
+                            elif method_name == 'tsne':
+                                tsne_time = metadata['time']
+                            elif method_name == 'umap':
+                                umap_time = metadata['time']
+                        print(f"Using saved {method_name} embedding")
+                        return embedding
             
-            # Compute new embedding
-            embedding, compute_time = compute_func(*args)
-            
-            # Save the embedding if computation was successful
-            if embedding is not None:
-                metadata = {'time': compute_time}
-                save_embedding(dataset_name, method_name, embedding, metadata)
+            # Only compute new embedding if recalculate is True or no saved embedding exists
+            if recalculate_flag or not embedding_exists(dataset_name, method_name):
+                print(f"Computing new {method_name} embedding")
+                embedding, compute_time = compute_func(*args)
                 
-                # Update timing
-                if method_name == 'trimap':
-                    trimap_time = compute_time
-                elif method_name == 'tsne':
-                    tsne_time = compute_time
-                elif method_name == 'umap':
-                    umap_time = compute_time
+                # Save the embedding if computation was successful
+                if embedding is not None:
+                    metadata = {'time': compute_time}
+                    save_embedding(dataset_name, method_name, embedding, metadata)
+                    
+                    # Update timing
+                    if method_name == 'trimap':
+                        trimap_time = compute_time
+                    elif method_name == 'tsne':
+                        tsne_time = compute_time
+                    elif method_name == 'umap':
+                        umap_time = compute_time
+                
+                return embedding
             
-            return embedding
+            return None  # Return None if no embedding is available and we're not computing
         
         # Get embeddings for all methods
         key = random.PRNGKey(0)
@@ -385,12 +410,13 @@ def register_callbacks(app):
         # Metadata display
         metadata = create_metadata_display(dataset_name, data)
         
-        # Update cache
-        cached_embeddings[dataset_name] = {
-            'trimap': trimap_emb.tolist() if trimap_emb is not None else None,
-            'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
-            'umap': umap_emb.tolist() if umap_emb is not None else None
-        }
+        # Update cache only if we have new embeddings
+        if recalculate_flag:
+            cached_embeddings[dataset_name] = {
+                'trimap': trimap_emb.tolist() if trimap_emb is not None else None,
+                'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
+                'umap': umap_emb.tolist() if umap_emb is not None else None
+            }
         
         return (
             main_fig,
@@ -443,20 +469,37 @@ def register_callbacks(app):
         Output('coordinates-display', 'children'),
         Output('point-metadata', 'children'),
         Output('click-message', 'style'),
+        Output('generative-mode-placeholder', 'style'),
         Input('main-graph', 'clickData'),
+        Input('generative-mode-state', 'data'),
         State('dataset-dropdown', 'value'),
         State('main-graph', 'figure')
     )
-    def display_clicked_point(clickData, dataset_name, figure):
+    def display_clicked_point(clickData, generative_state, dataset_name, figure):
+        enabled = generative_state.get('enabled', False) if generative_state else False
+        
+        if enabled:
+            # In generative mode, show placeholder and hide other image elements
+            return (
+                '', # selected-image src
+                get_image_style('none'), # selected-image style
+                get_no_image_message_style('none'), # no-image-message style
+                "", # coordinates-display children
+                "", # point-metadata children
+                {'display': 'none'}, # click-message style
+                get_generative_placeholder_style('block') # generative-mode-placeholder style
+            )
+        
         if not clickData:
             # Return default states when nothing is clicked
             return (
                 '', # selected-image src
-                {'display': 'none'}, # selected-image style
-                {'display': 'block', 'text-align': 'center', 'padding': '1rem'}, # no-image-message style
+                get_image_style('none'), # selected-image style
+                get_no_image_message_style('block'), # no-image-message style
                 "", # coordinates-display children
                 "", # point-metadata children
-                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'} # click-message style
+                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'}, # click-message style
+                get_generative_placeholder_style('none') # generative-mode-placeholder style
             )
         
         # Get the point index from the custom data
@@ -483,64 +526,66 @@ def register_callbacks(app):
         coordinates_table = html.Table([
             html.Thead(
                 html.Tr([
-                    html.Th("Property", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Th("Value", style={'text-align': 'right', 'padding': '8px'})
+                    html.Th("Property", style=CELL_STYLE),
+                    html.Th("Value", style=CELL_STYLE_RIGHT)
                 ])
             ),
             html.Tbody([
                 html.Tr([
-                    html.Td("Sample", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(f"#{point_index}", style={'text-align': 'right', 'padding': '8px'})
+                    html.Td("Sample", style=CELL_STYLE),
+                    html.Td(f"#{point_index}", style=CELL_STYLE_RIGHT)
                 ]),
                 html.Tr([
-                    html.Td("Class", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(class_label, style={'text-align': 'right', 'padding': '8px'})
+                    html.Td("Class", style=CELL_STYLE),
+                    html.Td(class_label, style=CELL_STYLE_RIGHT)
                 ]),
                 html.Tr([
-                    html.Td("Label", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(digit_label, style={'text-align': 'right', 'padding': '8px'})
+                    html.Td("Label", style=CELL_STYLE),
+                    html.Td(digit_label, style=CELL_STYLE_RIGHT)
                 ]),
                 html.Tr([
-                    html.Td("X Coordinate", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(f"{x_coord:.4f}", style={'text-align': 'right', 'padding': '8px'})
+                    html.Td("X Coordinate", style=CELL_STYLE),
+                    html.Td(f"{x_coord:.4f}", style=CELL_STYLE_RIGHT)
                 ]),
                 html.Tr([
-                    html.Td("Y Coordinate", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(f"{y_coord:.4f}", style={'text-align': 'right', 'padding': '8px'})
+                    html.Td("Y Coordinate", style=CELL_STYLE),
+                    html.Td(f"{y_coord:.4f}", style=CELL_STYLE_RIGHT)
                 ])
             ])
-        ], style={'width': '100%', 'border-collapse': 'collapse'})
+        ], style=TABLE_STYLE)
         
         # Create metadata table
         metadata_table = html.Table([
             html.Thead(
                 html.Tr([
-                    html.Th("Feature", style={'text-align': 'left', 'padding': '8px'}),
-                    html.Th("Value", style={'text-align': 'right', 'padding': '8px'})
+                    html.Th("Feature", style=CELL_STYLE),
+                    html.Th("Value", style=CELL_STYLE_RIGHT)
                 ])
             ),
             html.Tbody([
                 html.Tr([
-                    html.Td(name, style={'text-align': 'left', 'padding': '8px'}),
-                    html.Td(f"{value:.4f}", style={'text-align': 'right', 'padding': '8px'})
+                    html.Td(name, style=CELL_STYLE),
+                    html.Td(f"{value:.4f}", style=CELL_STYLE_RIGHT)
                 ])
                 for name, value in zip(features_to_display, X[point_index][:len(features_to_display)])
             ])
-        ], style={'width': '100%', 'border-collapse': 'collapse'})
+        ], style=TABLE_STYLE)
         
-        # For image datasets (Digits, MNIST, Fashion MNIST), create and display the image
-        if dataset_name in ["Digits", "MNIST", "Fashion MNIST"]:
+        # For image datasets (Digits, MNIST, Fashion MNIST, Elephant), create and display the image
+        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant"]:
             import base64
             from io import BytesIO
             
             # Get the image dimensions based on the dataset
             if dataset_name == "Digits":
                 img_shape = (8, 8)
+            elif dataset_name == "Elephant":
+                img_shape = (28, 28)  # Elephant images are resized to 28x28
             else:  # MNIST or Fashion MNIST
                 img_shape = (28, 28)
             
             # Create the image with proper aspect ratio
-            plt.figure(figsize=(4, 4))
+            plt.figure(figsize=IMAGE_FIGURE_SIZE)
             plt.imshow(X[point_index].reshape(img_shape), cmap='gray')
             plt.axis('off')
             
@@ -551,23 +596,39 @@ def register_callbacks(app):
             buf.seek(0)
             img_str = base64.b64encode(buf.read()).decode()
             
+            # For image-only datasets, show empty metadata
+            if dataset_name in IMAGE_ONLY_DATASETS:
+                metadata_content = html.Div("No meaningful metadata to display for image data", 
+                                          style=EMPTY_METADATA_STYLE)
+            else:
+                metadata_content = metadata_table
+            
             return (
                 f'data:image/png;base64,{img_str}',
-                {'max-width': '100%', 'height': '22vh', 'object-fit': 'contain', 'display': 'block', 'padding': '0.5rem'},
-                {'display': 'none'},
+                get_image_style('block'),
+                get_no_image_message_style('none'),
                 coordinates_table,
-                metadata_table,
-                {'display': 'none'} # Hide click message
+                metadata_content,
+                {'display': 'none'}, # Hide click message
+                get_generative_placeholder_style('none') # Hide generative mode placeholder
             )
         
         # For other datasets, show no image message and metadata
+        # For image-only datasets, show empty metadata
+        if dataset_name in IMAGE_ONLY_DATASETS:
+            metadata_content = html.Div("No meaningful metadata to display for image data", 
+                                      style=EMPTY_METADATA_STYLE)
+        else:
+            metadata_content = metadata_table
+        
         return (
             '',
-            {'display': 'none'},
-            {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'height': '22vh'},
+            get_image_style('none'),
+            get_no_image_message_style('block'),
             coordinates_table,
-            metadata_table,
-            {'display': 'none'} # Hide click message
+            metadata_content,
+            {'display': 'none'}, # Hide click message
+            get_generative_placeholder_style('none') # Hide generative mode placeholder
         )
 
     # Callbacks for the new UI elements in the left panel
@@ -576,18 +637,55 @@ def register_callbacks(app):
     @app.callback(
         Output('generative-mode-btn', 'color'),
         Output('generative-mode-btn', 'children'),
+        Output('generative-mode-state', 'data'),
         Input('generative-mode-btn', 'n_clicks'),
-        State('generative-mode-btn', 'color'),
+        State('generative-mode-state', 'data'),
         prevent_initial_call=True
     )
-    def toggle_generative_mode(n_clicks, current_color):
+    def toggle_generative_mode(n_clicks, current_state):
         if n_clicks is None:
-            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"] # Default off
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
 
-        if current_color == 'secondary':
-            return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"]
+        # Toggle the state
+        new_enabled = not current_state.get('enabled', False)
+        
+        if new_enabled:
+            return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], {'enabled': True}
         else:
-            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"]
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
+
+    # Callback to show/hide iterative slider based on generative mode
+    @app.callback(
+        Output('iteration-slider', 'className'),
+        Output('slider-play-btn', 'style'),
+        Input('generative-mode-state', 'data'),
+        prevent_initial_call=False
+    )
+    def toggle_iterative_slider(generative_state):
+        enabled = generative_state.get('enabled', False) if generative_state else False
+        
+        if enabled:
+            # Hide the slider and play button when generative mode is on
+            return 'mb-3 d-none', {'display': 'none'}
+        else:
+            # Show the slider and play button when generative mode is off
+            return 'mb-3', {'display': 'block'}
+
+    # Callback to show/hide iterative process label based on generative mode
+    @app.callback(
+        Output('iteration-process-container', 'style'),
+        Input('generative-mode-state', 'data'),
+        prevent_initial_call=False
+    )
+    def toggle_iterative_process_label(generative_state):
+        enabled = generative_state.get('enabled', False) if generative_state else False
+        
+        if enabled:
+            # Hide the entire iterative process container when generative mode is on
+            return {'display': 'none'}
+        else:
+            # Show the iterative process container when generative mode is off
+            return {'display': 'block'}
 
     # Distance Measure Buttons (Mutually Exclusive)
     @app.callback(
@@ -691,6 +789,20 @@ def register_callbacks(app):
         if n_clicks:
             return "" 
         return ""
+
+    # Callback to show/hide metadata row based on dataset type
+    @app.callback(
+        Output('point-metadata-row', 'style'),
+        Input('dataset-dropdown', 'value'),
+        prevent_initial_call=False
+    )
+    def toggle_metadata_row(dataset_name):
+        if dataset_name in IMAGE_ONLY_DATASETS:
+            # Hide the metadata row for image-only datasets
+            return {'display': 'none'}
+        else:
+            # Show the metadata row for datasets with meaningful features
+            return {'display': 'block'}
 
     # Existing callbacks (ensure they are still present after the edit)
 
