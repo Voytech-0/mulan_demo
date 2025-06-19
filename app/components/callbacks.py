@@ -294,7 +294,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
 
     # Map y to class names for legend
     y_int = y.astype(int)
-    y_labels = [class_names[i] if i < len(class_names) else str(i) for i in y_int]
+    y_labels = [class_names[i] if 0 <= i < len(class_names) else str(i) for i in y_int]
 
     unique_labels = pd.Series(y_labels).unique()
     color_seq = px.colors.qualitative.Plotly
@@ -560,9 +560,9 @@ def register_callbacks(app):
             n_added=n_added
         )
         
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
         
         # UMAP warning
         umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
@@ -639,12 +639,24 @@ def register_callbacks(app):
     def display_clicked_point(clickData, generative_state, dataset_name, figure, embedding_cache):
         enabled = generative_state.get('enabled', False) if generative_state else False
 
+        if not clickData:
+            # Return default states when nothing is clicked
+            return (
+                '',  # selected-image src
+                get_image_style('none'),  # selected-image style
+                get_no_image_message_style('block'),  # no-image-message style
+                "",  # coordinates-display children
+                "",  # point-metadata children
+                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem',
+                 'color': '#666'},  # click-message style
+                get_generative_placeholder_style('none')  # generative-mode-placeholder style
+            )
+
         if enabled:
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
             X, _, _ = get_dataset(dataset_name)
-            print(embedding_cache.keys())
-            embedding = np.array(embedding_cache[dataset_name]['trimap'][:len(X)])  # exclude user generated
+            embedding, _ = load_embedding(dataset_name, 'trimap')
             sample = generate_sample(x_coord, y_coord, X, embedding)
             img_str = encode_img_as_str(sample, dataset_name)
             # In generative mode, show placeholder and hide other image elements
@@ -656,18 +668,6 @@ def register_callbacks(app):
                 "", # point-metadata children
                 {'display': 'none'}, # click-message style
                 get_generative_placeholder_style('block') # generative-mode-placeholder style
-            )
-
-        if not clickData:
-            # Return default states when nothing is clicked
-            return (
-                '', # selected-image src
-                get_image_style('none'), # selected-image style
-                get_no_image_message_style('block'), # no-image-message style
-                "", # coordinates-display children
-                "", # point-metadata children
-                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'}, # click-message style
-                get_generative_placeholder_style('none') # generative-mode-placeholder style
             )
         
         # Defensive: check for 'customdata' in clickData['points'][0]
