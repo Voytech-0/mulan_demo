@@ -71,10 +71,34 @@ BREAST_CANCER_FEATURES = [
     'worst fractal dimension'
 ]
 
+# MNIST features (784 pixel values) - empty list since it's purely image data
+MNIST_FEATURES = [
+    # MNIST is purely image data, so we don't display individual pixel features
+    # 'pixel_0_0', 'pixel_0_1', ..., 'pixel_27_27' (784 total pixels)
+]
+
+# Fashion MNIST features (784 pixel values) - empty list since it's purely image data
+FASHION_MNIST_FEATURES = [
+    # Fashion MNIST is purely image data, so we don't display individual pixel features
+    # 'pixel_0_0', 'pixel_0_1', ..., 'pixel_27_27' (784 total pixels)
+]
+
+# Elephant features (pixel values from the elephant image) - empty list since it's purely image data
+ELEPHANT_FEATURES = [
+    # Elephant dataset is purely image data, so we don't display individual pixel features
+    # 'pixel_0_0', 'pixel_0_1', ..., 'pixel_n_m' (depends on image size)
+]
+
 # Dictionary mapping dataset names to their feature lists
 DATASET_FEATURES = {
     "Digits": DIGITS_FEATURES,
     "Iris": IRIS_FEATURES,
     "Wine": WINE_FEATURES,
-    "Breast Cancer": BREAST_CANCER_FEATURES
-} 
+    "Breast Cancer": BREAST_CANCER_FEATURES,
+    "MNIST": MNIST_FEATURES,
+    "Fashion MNIST": FASHION_MNIST_FEATURES,
+    "Elephant": ELEPHANT_FEATURES
+}
+
+# List of datasets that are purely image data (no meaningful metadata to display)
+IMAGE_ONLY_DATASETS = ["Digits", "MNIST", "Fashion MNIST", "Elephant"] 

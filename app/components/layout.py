@@ -1,10 +1,16 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from dash_canvas import DashCanvas
+from .settings import (
+    IMAGE_DISPLAY_CONTAINER_HEIGHT, SELECTED_IMAGE_STYLE, NO_IMAGE_MESSAGE_STYLE,
+    GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
+    METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR
+)
+import pandas as pd
 
 def create_layout(app):
     return html.Div([
         html.H1("Manifold Learning Visualizations", className="text-center mb-4"),
+        dcc.Store(id='generative-mode-state', data={'enabled': False}),
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
@@ -21,22 +27,24 @@ def create_layout(app):
                             dbc.Col([
                                 dbc.Row([
                                     html.H5("Image", className="text-center mb-2"),
-                                    html.Img(id='selected-image', src='', style={'max-width': '100%', 'height': '22vh', 'display': 'none','padding': '0.5rem'}),
-                                    html.Div(id='no-image-message', children="No image to display in this dataset", style={'display': 'none', 'text-align': 'center', 'padding': '0.5rem', 'height': '22vh'})
+                                    html.Img(id='selected-image', src='', style=SELECTED_IMAGE_STYLE),
+                                    html.Div(id='no-image-message', children="No image to display in this dataset", style=NO_IMAGE_MESSAGE_STYLE),
+                                    html.Div(id='generative-mode-placeholder', children="Generative mode content will appear here", style=GENERATIVE_PLACEHOLDER_STYLE)
                                 ]),
                                 dbc.Row([
                                     html.H5("Coordinates", className="text-center mb-2"),
-                                    html.Div(id='coordinates-display', style={'height': '24vh', 'overflow-y': 'auto', 'border': '1px solid #dee2e6', 'padding': '0.5rem'})
-                                ])
-                            ], width=6),
+                                    html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
+                                ]),
+                                dbc.Row([
+                                    html.H5("Point Metadata", className="text-center mb-2"),
+                                    html.Div(id='point-metadata', style=METADATA_DISPLAY_STYLE),
+                                ], id='point-metadata-row')
+                            ], width=12),
         
-                            dbc.Col([
-                                html.H5("Metadata", className="text-center mb-2"),
-                                html.Div(id='point-metadata', style={'height': '47vh', 'overflow-y': 'auto', 'border': '1px solid #dee2e6', 'padding': '0.5rem'})
-                            ], width=6)
+
                         ])
                     ],
-                    style={'height': '56vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem', 'display': 'block',
+                    style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
                            'visibility': 'visible'}
                 ),
                 # GENERATIVE MODE
@@ -138,22 +146,23 @@ def create_layout(app):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row([
-                            dbc.Col(html.P("Recalculate", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(html.P("Use Saved", className="mb-0 me-2 text-white"), width="auto"),
                             dbc.Col(dbc.Switch(
                                 id="recalculate-switch",
                                 value=False,
                                 className="me-2"
                             ), width="auto"),
-                            dbc.Col(html.P("Use Saved", className="mb-0 text-white"), width="auto"),
+                            dbc.Col(html.P("Recalculate", className="mb-0 text-white"), width="auto"),
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
-                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
                             dbc.Col(dbc.Switch(
                                 id="parametric-iterative-switch",
                                 value=False,
                                 className="me-2"
                             ), width="auto"),
-                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
+                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
                             dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width="auto"),
@@ -171,13 +180,16 @@ def create_layout(app):
                             id="generative-mode-btn",
                             className="mb-3 w-100 control-button"
                         ), width=12),
-                dcc.Store(id='generative-mode', data=False),
                 dcc.Store(id='embedding-cache', data={}),
-                
+                dbc.Col(dbc.Button(
+                            [html.I(className="fas fa-play"), "Generate grid"],
+                            id="grid-btn",
+                            className="mb-3 w-100 control-button"
+                        ), width=6),
             ], width=4),
             
 
-            # Right Column (8/12 width): Main Graph and Thumbnails
+            # Right Column (8/12 idth): Main Graph and Thumbnails
             dbc.Col([
                 # Recalculate switch (moved from here, but keeping placeholder comments for clarity)
                 # dbc.Row([ ... ]),
@@ -233,13 +245,15 @@ def create_layout(app):
                                             disabled=True
                                         )
                                     ], align="center", className="g-0"),
-                                ], style={'margin-bottom': '1rem'})
+                                ], id='iteration-process-container', style={'margin-bottom': '1rem'})
                             ],
                             fullscreen=False,
                             parent_style={'position': 'relative'},
                             style={'position': 'relative'}
-                        )
+                        ),
+
                     ], width=9),
+
                     # Thumbnails (right, vertical, stretch, now width=3)
                     dbc.Col([
                         html.Div([
@@ -292,7 +306,7 @@ def create_layout(app):
                         html.Div(
                             id='metadata-display',
                             children="",
-                            style={'height': '20vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': '#23272b', 'color': 'white'}
+                            style={'height': METADATA_DISPLAY_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': BACKGROUND_COLOR, 'color': 'white'}
                         ),
                         width=7
                     ),
