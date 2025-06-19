@@ -10,6 +10,13 @@ from dash import dcc, html, Input, Output, callback_context, State, callback
 import numpy as np
 import threading
 import matplotlib
+import pandas as pd
+
+from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
+from .plot_maker import add_new_data_to_fig
+from .settings import get_image_style, get_no_image_message_style, get_generative_placeholder_style, CELL_STYLE, \
+    CELL_STYLE_RIGHT, TABLE_STYLE, EMPTY_METADATA_STYLE
+
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import time
@@ -24,16 +31,17 @@ from .embedding_storage import save_embedding, load_embedding, embedding_exists
 from dash_canvas.utils import parse_jsonstring
 from math import ceil, floor
 import cv2
-import plotly.graph_objects as go
 
 
-from .features import dynamically_add, generate_sample, dataset_shape, encode_img_as_str, invisible_interactable_layer
+from .features import dynamically_add, generate_sample, dataset_shape
+from .plot_maker import encode_img_as_str, invisible_interactable_layer
 # Import TRIMAP from local package
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'google_research_trimap'))
 from google_research_trimap.trimap import trimap
 
 # Try to import UMAP, if available
+_image_cache = {}
 umap_available = False
 umap_lib = None # Use a distinct name for the imported module
 try:
@@ -288,20 +296,32 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
     y_int = y.astype(int)
     y_labels = [class_names[i] if i < len(class_names) else str(i) for i in y_int]
 
-    # Create a DataFrame with all the data
-    import pandas as pd
-    df = pd.DataFrame({
-        'x': embedding[:, 0],
-        'y': embedding[:, 1],
-        'color': y_labels,
-        'point_index': point_indices,
-        'label': y_labels
-    })
+    unique_labels = pd.Series(y_labels).unique()
+    color_seq = px.colors.qualitative.Plotly
+    color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
+    n_original = len(y) - n_added
+    sections = [slice(0, n_original)]
+
+    visualize_added_samples = n_added > 0 and embedding.shape[0] == X.shape[0]
+    if visualize_added_samples:
+        sections.append(slice(n_original, None))
+
+    data_frames = []
+    for section in sections:
+        df = pd.DataFrame({
+            'x': embedding[section, 0],
+            'y': embedding[section, 1],
+            'point_index': point_indices[section],
+            'label': y_labels[section]
+        })
+        df['color'] = df['label'].map(color_map)
+        data_frames.append(df)
 
     # Set category order for consistent color mapping
     category_orders = {'color': class_names}
 
     # Check if we should show images and if we have image data
+    df = data_frames[0]
     if show_images and X is not None and len(X) > 0:
         if len(X[0]) in [64, 784]:
             max_images = 100
@@ -375,57 +395,11 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
             category_orders=category_orders
         )
-    unique_labels = pd.Series(y).astype(str).unique()
-    color_seq = px.colors.qualitative.Plotly
-    color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
-    n_original = len(y) - n_added
-    sections = [slice(0, n_original)]
 
-    visualize_added_samples = n_added > 0 and embedding.shape[0] == X.shape[0]
-    if visualize_added_samples:
-        sections.append(slice(n_original, None))
-
-    data_frames = []
-    for section in sections:
-        df = pd.DataFrame({
-            'x': embedding[section, 0],
-            'y': embedding[section, 1],
-            'point_index': point_indices[section],
-            'label': y[section].astype(str)
-        })
-        df['color'] = df['label'].map(color_map)
-        data_frames.append(df)
-
-    # Create the figure with the DataFrame
-    fig = px.scatter(
-        data_frames[0], # Original data
-        x='x',
-        y='y',
-        color='color',
-        custom_data=['point_index', 'label'],
-        title=title,
-        labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
-    )
 
     # Additional points
     if visualize_added_samples:
-        for label in data_frames[1]['label'].unique():
-            df_subset = data_frames[1][data_frames[1]['label'] == label]
-            fig.add_trace(go.Scatter(
-                x=df_subset['x'],
-                y=df_subset['y'],
-                mode='markers',
-                marker=dict(
-                    symbol='circle' if label == '-1.0' else 'x',
-                    size=20 if label == '-1.0' else 10,
-                    color=color_map[label],
-                    line=dict(width=2, color='black')
-                ),
-                name=f'Additional: {label}',
-                customdata=df_subset[['point_index', 'label']].values,
-                hovertemplate='Index: %{customdata[0]}<br>Label: %{customdata[1]}<extra></extra>',
-                showlegend=True
-            ))
+        add_new_data_to_fig(fig, data_frames[1], color_map)
 
     if is_thumbnail:
         fig.update_layout(
@@ -435,7 +409,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             showlegend=False,
             hovermode=False
         )
-
     else:
         df = data_frames[0]
         fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
@@ -661,7 +634,6 @@ def register_callbacks(app):
         Input('generative-mode-state', 'data'),
         State('dataset-dropdown', 'value'),
         State('main-graph', 'figure'),
-        State('generative-mode', 'data'), # determines if generative mode on
         State('embedding-cache', 'data')
     )
     def display_clicked_point(clickData, generative_state, dataset_name, figure, embedding_cache):
@@ -671,37 +643,19 @@ def register_callbacks(app):
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
             X, _, _ = get_dataset(dataset_name)
+            print(embedding_cache.keys())
             embedding = np.array(embedding_cache[dataset_name]['trimap'][:len(X)])  # exclude user generated
             sample = generate_sample(x_coord, y_coord, X, embedding)
             img_str = encode_img_as_str(sample, dataset_name)
             # In generative mode, show placeholder and hide other image elements
             return (
-                '', # selected-image src
+                f'data:image/png;base64,{img_str}',
                 get_image_style('none'), # selected-image style
                 get_no_image_message_style('none'), # no-image-message style
                 "", # coordinates-display children
                 "", # point-metadata children
                 {'display': 'none'}, # click-message style
                 get_generative_placeholder_style('block') # generative-mode-placeholder style
-            )
-
-    def display_clicked_point(clickData, dataset_name, figur, generative_mode, embedding_cache):
-        if generative_mode:
-            x_coord = clickData['points'][0]['x']
-            y_coord = clickData['points'][0]['y']
-            X, _, _ = get_dataset(dataset_name)
-            embedding = np.array(embedding_cache[dataset_name]['trimap'][:len(X)]) # exclude user generated
-            sample = generate_sample(x_coord, y_coord, X, embedding)
-            img_str = encode_img_as_str(sample, dataset_name)
-
-            return (
-                f'data:image/png;base64,{img_str}',
-                {'display': 'none'},  # selected-image style
-                {'display': 'block', 'text-align': 'center', 'padding': '1rem'},  # no-image-message style
-                "",  # coordinates-display children
-                "",  # point-metadata children
-                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem',
-                 'color': '#666'}  # click-message style
             )
 
         if not clickData:
