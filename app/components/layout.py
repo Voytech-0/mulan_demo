@@ -74,7 +74,7 @@ def create_layout(app):
                     dbc.Col(dcc.Dropdown(
                         id='dist-dropdown',
                         options=[{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']],
-                        value='opt1',
+                        value='euclidean',
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',

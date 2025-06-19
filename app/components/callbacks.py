@@ -1,27 +1,30 @@
+import base64
+import io
 import threading
+import time
+from io import BytesIO
 
 import jax.random as random
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import plotly.express as px
+import plotly.graph_objs as go
+import requests
+import tensorflow as tf
+import umap.umap_ as umap
+from PIL import Image
 from dash import html, Input, Output, callback_context, State
 from sklearn import datasets
 from sklearn.manifold import TSNE
 
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-import time
-import io
-import base64
-from PIL import Image
-import tensorflow as tf
-import requests
-from io import BytesIO
 from .embedding_storage import save_embedding, load_embedding, embedding_exists
+
+matplotlib.use('Agg')  # Use non-interactive backend
 
 # Import TRIMAP from local package
 from google_research_trimap.trimap import trimap
-import umap.umap_ as umap
 
 
 
@@ -242,13 +245,16 @@ def create_datapoint_image(data_point, size=(20, 20)):
 
 
 def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, animated=False):
-    import pandas as pd
-    import numpy as np
-    import plotly.graph_objs as go
+    # Non-animated mode (single embedding)
+    if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
+        return px.scatter(title=f"{title} (no data)")
 
-    # Animation mode: embedding is a sequence of 2D arrays (frames)
-    if animated and embedding is not None and hasattr(embedding, '__len__') and len(embedding) >= 1:
-        n_frames = min(400, len(embedding))
+    if animated==False and not is_thumbnail:
+        embedding = embedding[np.newaxis, ...]  # Add a new head dimension for compatibility
+
+    # embedding is a sequence of 2D arrays (frames)
+    if not is_thumbnail and embedding is not None and hasattr(embedding, '__len__') and len(embedding) >= 1:
+        n_frames = max(1, len(embedding))
         frames = []
         # Use y for all frames (assume y is static)
         point_indices = np.arange(len(y))
@@ -327,12 +333,14 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, a
             ],
             "transition": {"duration": 0},
             "x": 0.1,
-            "y": 0,
+            "y": -0.18,  # Move slider lower
             "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
             "len": 0.9
         }]
-        fig.update_layout(
-            updatemenus=[{
+        # Only show Play/Pause buttons if there is more than one frame
+        updatemenus = []
+        if n_frames > 1:
+            updatemenus = [{
                 "type": "buttons",
                 "buttons": [
                     {
@@ -364,10 +372,12 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, a
                 "pad": {"r": 10, "t": 70},
                 "showactive": False,
                 "x": 0.1,
-                "y": 0,
+                "y": -0.18,  # Move buttons lower to match slider
                 "xanchor": "right",
                 "yanchor": "top"
-            }],
+            }]
+        fig.update_layout(
+            updatemenus=updatemenus,
             sliders=sliders,
             margin=dict(l=5, r=5, t=50, b=5)
         )
@@ -381,9 +391,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, a
             )
         return fig
 
-    # Non-animated mode (single embedding)
-    if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
-        return px.scatter(title=f"{title} (no data)")
 
     point_indices = np.arange(len(y))
     df = pd.DataFrame({
@@ -538,9 +545,6 @@ def register_callbacks(app):
                 "Class",
                 X
             )
-        elif method == 'trimap':
-            # Use animated Plotly figure for TRIMAP
-            main_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, animated=True)
         elif method == 'tsne':
             main_fig = create_figure(
                 tsne_emb,
@@ -563,7 +567,8 @@ def register_callbacks(app):
                 y,
                 f"TRIMAP Embedding of {dataset_name}",
                 "Class",
-                X
+                X,
+                animated=True
             )
 
         # Use the last frame (frame -1) for the thumbnail (static)
