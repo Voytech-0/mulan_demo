@@ -1,5 +1,6 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from dash_canvas import DashCanvas
 
 def create_layout(app):
     return html.Div([
@@ -7,6 +8,7 @@ def create_layout(app):
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
+                # VISUAL MODE
                 html.Div(
                     id='image-display',
                     children=[
@@ -34,7 +36,34 @@ def create_layout(app):
                             ], width=6)
                         ])
                     ],
-                    style={'height': '56vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem'}
+                    style={'height': '56vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem', 'display': 'block',
+                           'visibility': 'visible'}
+                ),
+                # GENERATIVE MODE
+                html.Div(
+                    id='image-draw',
+                    children=[
+                        html.H2("Generate New Datapoints"),
+                        DashCanvas(
+                            id='canvas',
+                            width=500,
+                            height=5000,
+                            lineWidth=50,
+                            lineColor='black',
+                            hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',
+                                          'redo', 'line', 'select', 'rectangle', 'pencil'],  # remove all except pencil
+                            tool='pencil',
+                        ),
+                        dbc.Button(
+                            "Submit Drawing",
+                            id="submit_drawing",
+                            color="primary",
+                            className="mt-3"
+                        ),
+                        dcc.Store(id='added-data-cache', data={}),
+                    ],
+                    style={'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem', 'display': 'block',
+                           'visibility': 'hidden'}
                 ),
 
                 # New elements for the left column as per user's image
@@ -142,6 +171,7 @@ def create_layout(app):
                             id="generative-mode-btn",
                             className="mb-3 w-100 control-button"
                         ), width=12),
+                dcc.Store(id='generative-mode', data=False),
                 dcc.Store(id='embedding-cache', data={}),
                 
             ], width=4),
