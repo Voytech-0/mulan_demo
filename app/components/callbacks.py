@@ -273,46 +273,50 @@ def create_datapoint_image(data_point, size=(20, 20)):
     
     return img_data_url
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False):
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None):
     if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
         return px.scatter(title=f"{title} (no data)")
     
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
+
+    # If class_names is not provided, use unique values in y as strings
+    if class_names is None:
+        unique_classes = np.unique(y)
+        class_names = [str(c) for c in unique_classes]
     
+    # Map y to class names for legend
+    y_int = y.astype(int)
+    y_labels = [class_names[i] if i < len(class_names) else str(i) for i in y_int]
+
     # Create a DataFrame with all the data
     import pandas as pd
     df = pd.DataFrame({
         'x': embedding[:, 0],
         'y': embedding[:, 1],
-        'color': y.astype(str),
+        'color': y_labels,
         'point_index': point_indices,
-        'label': y.astype(str)
+        'label': y_labels
     })
-    
+
+    # Set category order for consistent color mapping
+    category_orders = {'color': class_names}
+
     # Check if we should show images and if we have image data
     if show_images and X is not None and len(X) > 0:
-        # For image datasets, create image representations
-        if len(X[0]) in [64, 784]:  # Digits (8x8=64) or MNIST/Fashion MNIST (28x28=784)
-            # Limit the number of images to display for performance
-            max_images = 100 # if not is_thumbnail else 200  # Show more images
-            
+        if len(X[0]) in [64, 784]:
+            max_images = 100
             if len(X) > max_images:
-                # Sample points evenly across the dataset
                 step = len(X) // max_images
                 indices_to_show = list(range(0, len(X), step))[:max_images]
                 print(f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show)/len(X)*100:.1f}%)")
             else:
                 indices_to_show = list(range(len(X)))
                 print(f"Showing all {len(indices_to_show)} images")
-            
-            # Create image representations for selected points only
             images = []
             for i in indices_to_show:
                 img_str = create_datapoint_image(X[i], size=(15, 15))
                 images.append(img_str)
-            
-            # Create the figure with adaptive scatter points
             fig = px.scatter(
                 df,
                 x='x',
@@ -320,28 +324,23 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 color='color',
                 custom_data=['point_index', 'label'],
                 title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                category_orders=category_orders
             )
-            
-            # Update scatter points to have adaptive sizing
             fig.update_traces(
                 marker=dict(
-                    size=15,  # Base size that will scale with zoom
-                    sizeref=1,  # Reference size for scaling
-                    sizemin=5,  # Minimum size when zoomed out
+                    size=15,
+                    sizeref=1,
+                    sizemin=5,
                     sizemode='diameter'
                 ),
                 selector=dict(type='scatter')
             )
-            
-            # Add images as layout images on top
             for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
                 x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
-                # Calculate dynamic size based on plot range
                 x_range = df['x'].max() - df['x'].min()
                 y_range = df['y'].max() - df['y'].min()
                 base_size = max(x_range, y_range) * 0.04
-                
                 fig.add_layout_image(
                     dict(
                         source=img_str,
@@ -356,7 +355,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                     )
                 )
         else:
-            # For non-image datasets, fall back to regular scatter plot
             fig = px.scatter(
                 df,
                 x='x',
@@ -364,10 +362,10 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 color='color',
                 custom_data=['point_index', 'label'],
                 title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                category_orders=category_orders
             )
     else:
-        # Create the figure with regular dots
         fig = px.scatter(
             df,
             x='x',
@@ -375,9 +373,9 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             color='color',
             custom_data=['point_index', 'label'],
             title=title,
-            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name}
+            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+            category_orders=category_orders
         )
-    
     if is_thumbnail:
         fig.update_layout(
             margin=dict(l=0, r=0, t=0, b=0),
@@ -506,6 +504,9 @@ def register_callbacks(app):
         tsne_emb = get_embedding('tsne', compute_tsne, X)
         umap_emb = get_embedding('umap', compute_umap, X)
         
+        # Get class names for legend
+        class_names = getattr(data, 'target_names', None)
+        
         # Create figures
         main_fig = create_figure(
             trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
@@ -513,12 +514,13 @@ def register_callbacks(app):
             f"{method.upper()} Embedding of {dataset_name}",
             "Class",
             X,
-            show_images=show_images
+            show_images=show_images,
+            class_names=class_names
         )
         
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False)
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names)
         
         # UMAP warning
         umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
@@ -618,8 +620,18 @@ def register_callbacks(app):
                 get_generative_placeholder_style('none') # generative-mode-placeholder style
             )
         
-        # Get the point index from the custom data
-        point_index = int(clickData['points'][0]['customdata'][0])
+        # Defensive: check for 'customdata' in clickData['points'][0]
+        point_data = clickData['points'][0]
+        if 'customdata' in point_data:
+            point_index = int(point_data['customdata'][0])
+            digit_label = point_data['customdata'][1]
+        else:
+            # Fallback: try to use pointNumber or index
+            point_index = point_data.get('pointIndex', 0)
+            # Try to get the class label from the color/category
+            digit_label = point_data.get('curveNumber', '')
+            # If color/class name is present in 'text' or 'label', use it
+            digit_label = point_data.get('label', point_data.get('text', str(point_index)))
         X, y, data = get_dataset(dataset_name)
         
         # Get features to display from configuration or use default feature names
@@ -627,16 +639,14 @@ def register_callbacks(app):
         
         # Get the real class label
         if hasattr(data, 'target_names'):
-            class_label = data.target_names[y[point_index]]
+            # If y is integer index, map to class name
+            class_label = data.target_names[y[point_index]] if int(y[point_index]) < len(data.target_names) else str(y[point_index])
         else:
             class_label = f"Class {y[point_index]}"
             
         # Get the coordinates from the figure
-        x_coord = clickData['points'][0]['x']
-        y_coord = clickData['points'][0]['y']
-        
-        # Get the color label from the figure
-        digit_label = clickData['points'][0]['customdata'][1]
+        x_coord = point_data['x']
+        y_coord = point_data['y']
         
         # Create coordinates display with all requested fields
         coordinates_table = html.Table([

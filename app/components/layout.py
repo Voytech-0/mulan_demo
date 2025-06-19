@@ -5,6 +5,7 @@ from .settings import (
     GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
     METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR
 )
+import pandas as pd
 
 def create_layout(app):
     return html.Div([
@@ -126,13 +127,14 @@ def create_layout(app):
                             dbc.Col(html.P("Recalculate", className="mb-0 text-white"), width="auto"),
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
-                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
                             dbc.Col(dbc.Switch(
                                 id="parametric-iterative-switch",
                                 value=False,
                                 className="me-2"
                             ), width="auto"),
-                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
+                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
                             dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width="auto"),
@@ -151,11 +153,15 @@ def create_layout(app):
                             className="mb-3 w-100 control-button"
                         ), width=12),
                 dcc.Store(id='embedding-cache', data={}),
-                
+                dbc.Col(dbc.Button(
+                            [html.I(className="fas fa-play"), "Generate grid"],
+                            id="grid-btn",
+                            className="mb-3 w-100 control-button"
+                        ), width=6),
             ], width=4),
             
 
-            # Right Column (8/12 width): Main Graph and Thumbnails
+            # Right Column (8/12 idth): Main Graph and Thumbnails
             dbc.Col([
                 # Recalculate switch (moved from here, but keeping placeholder comments for clarity)
                 # dbc.Row([ ... ]),
@@ -216,8 +222,10 @@ def create_layout(app):
                             fullscreen=False,
                             parent_style={'position': 'relative'},
                             style={'position': 'relative'}
-                        )
+                        ),
+                        
                     ], width=9),
+                    
                     # Thumbnails (right, vertical, stretch, now width=3)
                     dbc.Col([
                         html.Div([
