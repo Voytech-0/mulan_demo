@@ -45,7 +45,8 @@ _image_cache = {}
 umap_available = False
 umap_lib = None # Use a distinct name for the imported module
 try:
-    import umap as umap_lib # Import as umap_lib
+    # import umap as umap_lib # Import as umap_lib
+    import umap.umap_ as umap_lib
     umap_available = True
 except ImportError:
     pass # umap_lib remains None
@@ -183,7 +184,9 @@ def get_dataset(name):
             y = data.target
     return X, y, data
 
-def compute_trimap(X, key):
+
+def compute_trimap(X, distance):
+    key = random.PRNGKey(0)
     start_time = time.time()
     with numba_global_lock:
         print('Starting TRIMAP calculation...')
@@ -195,34 +198,47 @@ def compute_trimap(X, key):
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False)
+        emb = trimap.transform(key, X, n_inliers=n_inliers, output_metric=distance, auto_diff=False, export_iters=False)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
         
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
-        print(f'Total TRIMAP calculation took: {total_time:.2f} seconds')
+    if distance == 'haversine':
+        # x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]), np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
+        # y = -np.arccos(np.cos(result[:, :, 0]))
+        # result = np.stack([x, y], axis=-1)
+        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+        y = -np.arccos(np.cos(result[:, 0]))
+        result = np.column_stack((x, y))
     return result, total_time
 
-def compute_tsne(X):
+
+def compute_tsne(X, distance):
+    if distance == 'haversine':
+        print("t-SNE is not supported for haversine distance. Returning None.")
+        return None, 0
     start_time = time.time()
     with numba_global_lock:
         print('calculating tsne')
-        emb = TSNE(n_components=2, random_state=42).fit_transform(X)
+        emb = TSNE(n_components=2, random_state=42, metric=distance).fit_transform(X)
         result = np.array(emb)
         print('tsne calculated')
     return result, time.time() - start_time
 
-def compute_umap(X):
-    if not umap_available or umap_lib is None:
-        return None, 0
+
+def compute_umap(X, distance):
     start_time = time.time()
     with numba_global_lock:
         print('calculating umap')
-        reducer = umap_lib.UMAP(n_components=2, random_state=42)
+        reducer = umap_lib.UMAP(n_components=2, random_state=42, output_metric=distance)
         emb = reducer.fit_transform(X)
         result = np.array(emb)
         print('umap calculated')
+    if distance == 'haversine':
+        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+        y = -np.arccos(np.cos(result[:, 0]))
+        result = np.column_stack((x, y))
     return result, time.time() - start_time
 
 def create_datapoint_image(data_point, size=(20, 20)):
@@ -448,9 +464,10 @@ def register_callbacks(app):
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data'),
         State('added-data-cache', 'data'),
+        Input('dist-dropdown', 'value')
     )
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
-                      added_data_cache):
+                      added_data_cache, distance):
         if not dataset_name:
             return [px.scatter(title="No dataset selected")] * 3 + [""] * 7
 
@@ -488,10 +505,10 @@ def register_callbacks(app):
         # Function to compute or load embeddings
         def get_embedding(method_name, compute_func, *args):
             nonlocal trimap_time, tsne_time, umap_time
-            
+
             # Check if we should use saved embeddings
-            if not recalculate_flag and embedding_exists(dataset_name, method_name):
-                embedding, metadata = load_embedding(dataset_name, method_name)
+            if not recalculate_flag and embedding_exists(dataset_name, method_name, distance):
+                embedding, metadata = load_embedding(dataset_name, method_name, distance)
                 if embedding is not None:
                     # Update timing from metadata if available
                     if metadata and 'time' in metadata:
@@ -503,16 +520,16 @@ def register_callbacks(app):
                             umap_time = metadata['time']
                     print(f"Using saved {method_name} embedding")
                     return embedding
-            
+
             # Only compute new embedding if recalculate is True or no saved embedding exists
-            if recalculate_flag or not embedding_exists(dataset_name, method_name):
+            if recalculate_flag or not embedding_exists(dataset_name, method_name, distance):
                 print(f"Computing new {method_name} embedding")
                 embedding, compute_time = compute_func(*args)
 
                 # Save the embedding if computation was successful
                 if embedding is not None:
                     metadata = {'time': compute_time}
-                    save_embedding(dataset_name, method_name, embedding, metadata)
+                    save_embedding(dataset_name, method_name, embedding, distance, metadata)
 
                     # Update timing
                     if method_name == 'trimap':
@@ -527,10 +544,9 @@ def register_callbacks(app):
             return None  # Return None if no embedding is available and we're not computing
         
         # Get embeddings for all methods
-        key = random.PRNGKey(0)
-        trimap_emb = get_embedding('trimap', compute_trimap, X, key)
-        tsne_emb = get_embedding('tsne', compute_tsne, X)
-        umap_emb = get_embedding('umap', compute_umap, X)
+        trimap_emb = get_embedding('trimap', compute_trimap, X, distance)
+        tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
+        umap_emb = get_embedding('umap', compute_umap, X, distance)
 
         # Get class names for legend
         class_names = getattr(data, 'target_names', None)
@@ -826,46 +842,6 @@ def register_callbacks(app):
             # Show the slider and play button when generative mode is off
             return 'mb-3', {'display': 'block'}
 
-    # Callback to show/hide iterative process label based on generative mode
-    @app.callback(
-        Output('iteration-process-container', 'style'),
-        Input('generative-mode-state', 'data'),
-        prevent_initial_call=False
-    )
-    def toggle_iterative_process_label(generative_state):
-        enabled = generative_state.get('enabled', False) if generative_state else False
-
-        if enabled:
-            # Hide the entire iterative process container when generative mode is on
-            return {'display': 'none'}
-        else:
-            # Show the iterative process container when generative mode is off
-            return {'display': 'block'}
-
-    # Distance Measure Buttons (Mutually Exclusive)
-    @app.callback(
-        [Output(f'dist-opt{i}-btn', 'className') for i in range(1, 3)] + [Output('dist-upload-btn', 'className')],
-        [Input(f'dist-opt{i}-btn', 'n_clicks') for i in range(1, 3)] + [Input('dist-upload-btn', 'n_clicks')],
-        prevent_initial_call=True
-    )
-    def select_distance_measure(*n_clicks):
-        ctx = callback_context
-        if not ctx.triggered:
-            # Default state, make the first one selected
-            classes = ['control-button'] * 3
-            classes[0] = 'control-button selected'
-            return classes
-
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        classes = ['control-button'] * 3
-
-        if button_id == 'dist-opt1-btn':
-            classes[0] = 'control-button selected'
-        elif button_id == 'dist-opt2-btn':
-            classes[1] = 'control-button selected'
-        elif button_id == 'dist-upload-btn':
-            classes[2] = 'control-button selected'
-        return classes
 
     # Layer Buttons (Mutually Exclusive)
     @app.callback(

@@ -109,7 +109,7 @@ def create_layout(app):
                     dbc.Col(dcc.Dropdown(
                         id='dist-dropdown',
                         options=[{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']],
-                        value='opt1',
+                        value='euclidean',
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
@@ -120,11 +120,7 @@ def create_layout(app):
                         persistence=True,
                         persistence_type='session'
                     ), width=5),
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-upload me-2"), "Custom distance"],
-                        id="custom-distance-btn",
-                        className="ms-2 control-button"
-                    ), width=4)
+
                 ], className="mb-3 align-items-center"),
                 dbc.Row([
                     dbc.Col(html.Label("Image space :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
@@ -211,48 +207,12 @@ def create_layout(app):
                                     config={'displayModeBar': True}
                                 ),
                                 html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'}),
-                                html.Div([
-                                    html.Label("Iterative process:", style={'margin-top': '1rem', 'margin-bottom': '0.5rem', 'font-weight': 'bold'}),
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Button(
-                                                html.I(className="fas fa-play"),
-                                                id="slider-play-btn",
-                                                color="primary",
-                                                outline=True,
-                                                style={"margin-right": "0.5rem"}
-                                            ),
-                                            width="auto"
-                                        ),
-                                        dbc.Col(
-                                            dcc.Slider(
-                                                id='iteration-slider',
-                                                min=0,
-                                                max=10,
-                                                step=1,
-                                                value=0,
-                                                marks=None,
-                                                tooltip={"placement": "bottom", "always_visible": True},
-                                                updatemode='drag',
-                                                included=False,
-                                                className='mb-3'
-                                            ),
-                                            width=True
-                                        ),
-                                        dcc.Interval(
-                                            id='slider-interval',
-                                            interval=500,  # ms
-                                            n_intervals=0,
-                                            disabled=True
-                                        )
-                                    ], align="center", className="g-0"),
-                                ], id='iteration-process-container', style={'margin-bottom': '1rem'})
+
                             ],
                             fullscreen=False,
                             parent_style={'position': 'relative'},
                             style={'position': 'relative'}
-                        ),
-
+                        )
                     ], width=9),
 
                     # Thumbnails (right, vertical, stretch, now width=3)
