@@ -101,4 +101,4 @@ DATASET_FEATURES = {
 }
 
 # List of datasets that are purely image data (no meaningful metadata to display)
-IMAGE_ONLY_DATASETS = ["Digits", "MNIST", "Fashion MNIST", "Elephant"] 
+IMAGE_ONLY_DATASETS = ["Digits", "MNIST", "Fashion MNIST", "Elephant", "PACS - Photo", "PACS - Sketch", "PACS - Cartoon", "PACS - Art Painting"] 

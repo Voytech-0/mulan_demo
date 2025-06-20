@@ -66,6 +66,13 @@ NO_IMAGE_MESSAGE_STYLE = {
     'height': NO_IMAGE_HEIGHT
 }
 
+NO_METADATA_MESSAGE_STYLE = {
+    'display': 'none', 
+    'text-align': 'center', 
+    'padding': STANDARD_PADDING, 
+    'height': NO_IMAGE_HEIGHT
+}
+
 GENERATIVE_PLACEHOLDER_STYLE = {
     'display': 'none', 
     'text-align': 'center', 
@@ -78,6 +85,7 @@ GENERATIVE_PLACEHOLDER_STYLE = {
 
 # Container styles
 COORDINATES_DISPLAY_STYLE = {
+    'display': 'block',
     'height': COORDINATES_HEIGHT, 
     'overflow-y': 'auto', 
     'border': f'1px solid {BORDER_COLOR}', 
@@ -114,6 +122,13 @@ def get_generative_placeholder_style(display_type='block'):
 
 # Function to get no image message style for callbacks
 def get_no_image_message_style(display_type='block'):
+    """Get no image message style with specified display type."""
+    style = NO_IMAGE_MESSAGE_STYLE.copy()
+    style['display'] = display_type
+    return style 
+
+# Function to get no image message style for callbacks
+def get_no_metadata_message_style(display_type='block'):
     """Get no image message style with specified display type."""
     style = NO_IMAGE_MESSAGE_STYLE.copy()
     style['display'] = display_type

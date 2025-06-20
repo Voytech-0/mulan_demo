@@ -11,10 +11,11 @@ import numpy as np
 import threading
 import matplotlib
 import pandas as pd
+import glob
 
 from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
 from .plot_maker import add_new_data_to_fig
-from .settings import get_image_style, get_no_image_message_style, get_generative_placeholder_style, CELL_STYLE, \
+from .settings import get_image_style, get_no_image_message_style, get_no_metadata_message_style , get_generative_placeholder_style, CELL_STYLE, \
     CELL_STYLE_RIGHT, TABLE_STYLE, EMPTY_METADATA_STYLE
 
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -49,6 +50,34 @@ try:
     umap_available = True
 except ImportError:
     pass # umap_lib remains None
+
+def load_PACS(domain='photo'):
+    """Load PACS dataset."""
+    base_path = os.path.join(os.path.dirname(__file__), "pacs_data", domain)
+    classes = sorted(os.listdir(base_path))
+    images = []
+    labels = []
+
+    for idx, class_name in enumerate(classes):
+        class_dir = os.path.join(base_path, class_name)
+        for ext in ('*.jpg', '*.png'):
+            for img_path in glob.glob(os.path.join(class_dir, ext)):
+                img = Image.open(img_path).convert("L").resize((28,28))
+                images.append(img)
+                labels.append(idx)
+
+    X = np.stack(images)
+    X = X.reshape(X.shape[0], -1).astype(np.float32)
+    y = np.array(labels)
+
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = classes
+            self.feature_names = [f"pixel_{i}" for i in range(self.data.shape[1])]
+
+    return Dataset(X, y)
 
 def load_fashion_mnist():
     """Load Fashion MNIST dataset."""
@@ -157,6 +186,10 @@ DATASET_LOADERS = {
     "Fashion MNIST": load_fashion_mnist,
     "MNIST": load_mnist,
     "Elephant": load_elephant,
+    "PACS - Photo": lambda: load_PACS("photo"),
+    "PACS - Sketch": lambda: load_PACS("sketch"),
+    "PACS - Cartoon": lambda: load_PACS("cartoon"),
+    "PACS - Art Painting": lambda: load_PACS("art_painting"),
 }
 
 # Single global lock for computations
@@ -346,6 +379,13 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
                 category_orders=category_orders
             )
+            if show_images and X is not None:
+                hover_texts = []
+                for i in df['point_index']:
+                    img_str = create_datapoint_image(X[i], size=(30, 30))
+                    hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
+                    hover_texts.append(hover_html)
+
             fig.update_traces(
                 marker=dict(
                     size=15,
@@ -353,6 +393,9 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                     sizemin=5,
                     sizemode='diameter'
                 ),
+                hoverinfo="text",
+                hovertemplate=None,
+                text=hover_texts,
                 selector=dict(type='scatter')
             )
             for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
@@ -579,6 +622,7 @@ def register_callbacks(app):
                 'umap': umap_emb.tolist() if umap_emb is not None else None
             }
 
+        calc_status = ""
         ctx = callback_context
         if not ctx.triggered:
             calc_status = f"Loaded dataset {dataset_name}" # Initial state, no message
@@ -619,15 +663,17 @@ def register_callbacks(app):
         Output('no-image-message', 'style'),
         Output('coordinates-display', 'children'),
         Output('point-metadata', 'children'),
+        Output('no-metadata-message', 'style'),
         Output('click-message', 'style'),
         Output('generative-mode-placeholder', 'style'),
         Input('main-graph', 'clickData'),
         Input('generative-mode-state', 'data'),
-        State('dataset-dropdown', 'value'),
+        Input('dataset-dropdown', 'value'),
+        State('last-clicked-dataset', 'data'),
         State('main-graph', 'figure'),
         State('embedding-cache', 'data')
     )
-    def display_clicked_point(clickData, generative_state, dataset_name, figure, embedding_cache):
+    def display_clicked_point(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache):
         enabled = generative_state.get('enabled', False) if generative_state else False
 
         if not clickData:
@@ -638,6 +684,7 @@ def register_callbacks(app):
                 get_no_image_message_style('block'),  # no-image-message style
                 "",  # coordinates-display children
                 "",  # point-metadata children
+                get_no_metadata_message_style('block'),
                 {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem',
                  'color': '#666'},  # click-message style
                 get_generative_placeholder_style('none')  # generative-mode-placeholder style
@@ -657,6 +704,7 @@ def register_callbacks(app):
                 get_no_image_message_style('none'), # no-image-message style
                 "", # coordinates-display children
                 "", # point-metadata children
+                get_no_metadata_message_style('none'),
                 {'display': 'none'}, # click-message style
                 get_generative_placeholder_style('block') # generative-mode-placeholder style
             )
@@ -739,15 +787,16 @@ def register_callbacks(app):
         ], style=TABLE_STYLE)
         
         # For image datasets (Digits, MNIST, Fashion MNIST, Elephant), create and display the image
-        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant"]:
+        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant", "PACS - Photo", "PACS - Cartoon", "PACS - Art Painting"]:
             img_str = encode_img_as_str(X[point_index], dataset_name)
 
             # For image-only datasets, show empty metadata
             if dataset_name in IMAGE_ONLY_DATASETS:
-                metadata_content = html.Div("No meaningful metadata to display for image data",
-                                          style=EMPTY_METADATA_STYLE)
+                metadata_content = ""
+                no_metadata_style = {'display': 'block', 'text-align': 'center', 'color': '#999', 'padding': '1rem'}
             else:
                 metadata_content = metadata_table
+                no_metadata_style = {'display': 'none'}
 
             return (
                 f'data:image/png;base64,{img_str}',
@@ -755,6 +804,7 @@ def register_callbacks(app):
                 get_no_image_message_style('none'),
                 coordinates_table,
                 metadata_content,
+                no_metadata_style,
                 {'display': 'none'}, # Hide click message
                 get_generative_placeholder_style('none') # Hide generative mode placeholder
             )
@@ -762,10 +812,11 @@ def register_callbacks(app):
         # For other datasets, show no image message and metadata
         # For image-only datasets, show empty metadata
         if dataset_name in IMAGE_ONLY_DATASETS:
-            metadata_content = html.Div("No meaningful metadata to display for image data",
-                                      style=EMPTY_METADATA_STYLE)
+                metadata_content = ""
+                no_metadata_style = {'display': 'block', 'text-align': 'center', 'color': '#999', 'padding': '1rem'}
         else:
             metadata_content = metadata_table
+            no_metadata_style = {'display': 'none'}
 
         return (
             '',
@@ -773,6 +824,7 @@ def register_callbacks(app):
             get_no_image_message_style('block'),
             coordinates_table,
             metadata_content,
+            no_metadata_style,
             {'display': 'none'}, # Hide click message
             get_generative_placeholder_style('none') # Hide generative mode placeholder
         )
@@ -1010,6 +1062,7 @@ def register_callbacks(app):
             # Show the metadata row for datasets with meaningful features
             return {'display': 'block'}
     
+    # Callback to show/automatically hide full grid
     @app.callback(
         Output("full-grid-container", "style"),
         [
@@ -1034,6 +1087,7 @@ def register_callbacks(app):
 
         return current_style
 
+    # Callback for displaying full grid
     @app.callback(
         Output("full-grid-container", "children"),
         Input("full-grid-btn", "n_clicks"),
@@ -1047,8 +1101,50 @@ def register_callbacks(app):
         
         return html.Div([
             html.Img(src=create_datapoint_image(X[i]), style={'width': '40px', 'margin': '2px'})
-            for i in range(min(len(X), 300))  # Limit for performance
+            for i in range(min(len(X), 300))  
         ], style={'display': 'grid', 'gridTemplateColumns': 'repeat(auto-fill, 40px)', 'gap': '4px'})
+    
+    @app.callback(
+        Output('dataset-dropdown', 'options'),
+        Output('dataset-dropdown', 'value'),
+        Input('dataset-family-dropdown', 'value'),
+    )
+    def update_dataset_options(family):
+        if family == "classic":
+            options = [
+                {"label": "Digits", "value": "Digits"},
+                {"label": "Iris", "value": "Iris"},
+                {"label": "Wine", "value": "Wine"},
+                {"label": "Breast Cancer", "value": "Breast Cancer"},
+                {"label": "MNIST", "value": "MNIST"},
+                {"label": "Fashion MNIST", "value": "Fashion MNIST"},
+                {"label": "Elephant", "value": "Elephant"},
+            ]
+            return options, "Digits"
+
+        elif family == "pacs":
+            options = [
+                {"label": "Photo", "value": "PACS - Photo"},
+                {"label": "Sketch", "value": "PACS - Sketch"},
+                {"label": "Cartoon", "value": "PACS - Cartoon"},
+                {"label": "Art Painting", "value": "PACS - Art Painting"},
+            ]
+            return options, "PACS - Photo"
+
+        elif family == "custom_upload":
+            return [{"label": "Upload Custom Dataset", "value": "custom_upload"}], "custom_upload"
+
+        return [], None
+    
+    # Reset when changing datasets
+    @app.callback(
+        Output('main-graph', 'clickData'),
+        Input('dataset-dropdown', 'value')
+    )
+    def reset_click_on_dataset_change(_):
+        return None
+
+
 
 
     # Existing callbacks (ensure they are still present after the edit)
