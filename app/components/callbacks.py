@@ -96,21 +96,21 @@ def load_elephant():
         response = requests.get(url)
         response.raise_for_status()  # Raise an exception for bad status codes
         img = Image.open(BytesIO(response.content))
-        
+
         # Convert to grayscale and resize
         img = img.convert('L')
         img = img.resize((28, 28))
-        
+
         # Convert to numpy array
         base_img = np.array(img)
-        
+
         # Create variations of the image
         n_samples = 10  # Create 10 variations
         X = np.zeros((n_samples, 784))  # 28x28 = 784 pixels
-        
+
         # Original image
         X[0] = base_img.reshape(-1)
-        
+
         # Create variations with different transformations
         for i in range(1, n_samples):
             # Random rotation
@@ -123,9 +123,9 @@ def load_elephant():
             noise = np.random.normal(0, 10, adjusted.shape).astype(np.uint8)
             noisy = np.clip(adjusted + noise, 0, 255).astype(np.uint8)
             X[i] = noisy.reshape(-1)
-        
+
         y = np.zeros(n_samples)  # All samples are class 0 (elephant)
-        
+
         # Create a dataset-like object
         class Dataset:
             def __init__(self, data, target):
@@ -252,7 +252,7 @@ def create_datapoint_image(data_point, size=(20, 20)):
 
     # Normalize the data point to 0-1 range
     normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
-    
+
     # Reshape if needed (assuming square image)
     side_length = int(np.sqrt(len(normalized)))
     if side_length * side_length == len(normalized):
@@ -275,7 +275,7 @@ def create_datapoint_image(data_point, size=(20, 20)):
     plt.figure(figsize=fig_size, dpi=300)  # Increased DPI from 100 to 300
     plt.imshow(img_data, cmap=cmap, interpolation='nearest')  # Use nearest neighbor interpolation
     plt.axis('off')
-    
+
     # Convert to base64
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
@@ -376,7 +376,7 @@ def create_animated_figure(embedding, y, title, label_name):
         ],
         "transition": {"duration": 0},
         "x": 0.1,
-        "y": 0,
+        "y": -0.15,
         "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
         "len": 0.9
     }]
@@ -413,7 +413,7 @@ def create_animated_figure(embedding, y, title, label_name):
             "pad": {"r": 10, "t": 70},
             "showactive": False,
             "x": 0.1,
-            "y": 0,
+            "y": -0.15,
             "xanchor": "right",
             "yanchor": "top"
         }],
@@ -442,7 +442,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
 
     # Map y to class names for legend
     y_int = y.astype(int)
-    y_labels = [class_names[i] if 0 <= i < len(class_names) else str(i) for i in y_int]
+    y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
 
     unique_labels = pd.Series(y_labels).unique()
     color_seq = px.colors.qualitative.Plotly
@@ -619,11 +619,11 @@ def register_callbacks(app):
 
         # Get the dataset
         X, y, data = get_dataset(dataset_name)
-        
+
         # Initialize embeddings dictionary if not exists
         if cached_embeddings is None:
             cached_embeddings = {}
-        
+
         # Determine which method was clicked
         ctx = callback_context
         if not ctx.triggered:
@@ -638,16 +638,16 @@ def register_callbacks(app):
                 method = 'umap'
             else:
                 method = 'trimap'  # Default method
-        
+
         # Initialize timing variables
         trimap_time = 0
         tsne_time = 0
         umap_time = 0
-        
+
         # Function to compute or load embeddings
         def get_embedding(method_name, compute_func, *args):
             nonlocal trimap_time, tsne_time, umap_time
-            
+
             # Check if we should use saved embeddings
             if not recalculate_flag and embedding_exists(dataset_name, method_name, distance):
                 embedding, metadata = load_embedding(dataset_name, method_name, distance)
@@ -662,7 +662,7 @@ def register_callbacks(app):
                             umap_time = metadata['time']
                     print(f"Using saved {method_name} embedding")
                     return embedding
-            
+
             # Only compute new embedding if recalculate is True or no saved embedding exists
             if recalculate_flag or not embedding_exists(dataset_name, method_name, distance):
                 print(f"Computing new {method_name} embedding")
@@ -730,13 +730,13 @@ def register_callbacks(app):
         trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
         tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
         umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
-        
+
         # UMAP warning
         umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
-        
+
         # Metadata display
         metadata = create_metadata_display(dataset_name, data)
-        
+
         # Update cache only if we have new embeddings
         if recalculate_flag:
             cached_embeddings[dataset_name] = {
@@ -754,8 +754,9 @@ def register_callbacks(app):
             animated_style = {'display': 'none'}
 
         ctx = callback_context
+        calc_status = ""
         if not ctx.triggered:
-            calc_status = f"Loaded dataset {dataset_name}" # Initial state, no message
+            calc_status = f"Loaded dataset {dataset_name}"  # Initial state, no message
 
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
