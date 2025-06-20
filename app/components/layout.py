@@ -1,105 +1,21 @@
-"""
-Layout components for the MULAN demo app.
-Defines the main application layout and UI components.
-"""
-
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from dash_canvas import DashCanvas
 from .settings import (
     IMAGE_DISPLAY_CONTAINER_HEIGHT, SELECTED_IMAGE_STYLE, NO_IMAGE_MESSAGE_STYLE,
     GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
     METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR
 )
-
-
-def create_dropdown(id_name, options, value, label, width=5):
-    """Create a styled dropdown component."""
-    return dbc.Col(dcc.Dropdown(
-        id=id_name,
-        options=options,  # type: ignore
-        value=value,
-        style={
-            'backgroundColor': '#2c3e50',
-            'color': 'white',
-            'border': '1px solid #dee2e6'
-        },
-        className="dash-bootstrap-dropdown custom-dropdown",
-        optionHeight=35,
-        persistence=True,
-        persistence_type='session'
-    ), width=width)
-
-
-def create_switch_row(label1, switch_id, label2, value=False):
-    """Create a row with a switch between two labels."""
-    return dbc.Row([
-        dbc.Col(html.P(label1, className="mb-0 me-2 text-white"), width="auto"),
-        dbc.Col(dbc.Switch(
-            id=switch_id,
-            value=value,
-            className="me-2"
-        ), width="auto"),
-        dbc.Col(html.P(label2, className="mb-0 text-white"), width="auto"),
-    ], align="center", justify="between", className="mb-3")
-
-
-def create_thumbnail(method_name, graph_id, timing_id, click_id, is_selected=False):
-    """Create a thumbnail component for a method."""
-    return html.Div(
-        id=click_id,
-        className=f"method-button-container thumbnail-button mb-3{' selected' if is_selected else ''}",
-        children=[
-            html.H4(method_name, className="text-center mb-2"),
-            html.Div(id=timing_id, className="timing-display"),
-            dcc.Graph(
-                id=graph_id,
-                style={'height': '13vh'},
-                config={'displayModeBar': False, 'staticPlot': True}
-            )
-        ]
-    )
-
+import pandas as pd
 
 def create_layout(app):
-    """Create the main application layout."""
-
-    # Dataset options
-    dataset_options = [
-        {"label": name, "value": name} for name in [
-            "Digits", "Iris", "Wine", "Breast Cancer",
-            "MNIST", "Fashion MNIST", "Elephant"
-        ]
-    ] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}]
-
-    # Distance measure options
-    distance_options = [{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']]
-
-    # Image space options
-    image_space_options = [{"label": name, "value": name} for name in ["layer 1", "layer 2", "layer 3", "final layer"]]
-
     return html.Div([
         html.H1("Manifold Learning Visualizations", className="text-center mb-4"),
         dcc.Store(id='generative-mode-state', data={'enabled': False}),
-
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
-                # Top-left corner buttons
-                dbc.Row([
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-plus me-2"), "Add New Datapoint"],
-                        id="add-datapoint-btn",
-                        color="primary",
-                        className="me-2 control-button"
-                    ), width="auto"),
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-th-large me-2"), "Full Grid"],
-                        id="full-grid-btn",
-                        color="secondary",
-                        className="control-button"
-                    ), width="auto")
-                ], className="mb-3"),
-                # Image display container
+                # VISUAL MODE
                 html.Div(
                     id='image-display',
                     children=[
@@ -125,45 +41,52 @@ def create_layout(app):
                                     html.Div(id='point-metadata', style=METADATA_DISPLAY_STYLE),
                                 ], id='point-metadata-row')
                             ], width=12),
+        
+
                         ])
                     ],
-                    style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem'}
+                    style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
+                           'visibility': 'visible'}
                 ),
-
-                # Full Grid container (hidden by default)
+                # GENERATIVE MODE
                 html.Div(
-                    id='full-grid-container',
-                    children=[],  # Will be filled by callback
-                    style={
-                        'display': 'none',
-                        'border': f'1px solid {BORDER_COLOR}',
-                        'padding': '1rem',
-                        'margin-bottom': '1rem',
-                        'height': '30vh',
-                        'overflowY': 'scroll',
-                        'backgroundColor': BACKGROUND_COLOR,
-                        'color': 'white'
-                    }
+                    id='image-draw',
+                    children=[
+                        html.H2("Generate New Datapoints"),
+                        DashCanvas(
+                            id='canvas',
+                            width=500,
+                            height=5000,
+                            lineWidth=50,
+                            lineColor='black',
+                            hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',
+                                          'redo', 'line', 'select', 'rectangle', 'pencil'],  # remove all except pencil
+                            tool='pencil',
+                        ),
+                        dbc.Button(
+                            "Submit Drawing",
+                            id="submit_drawing",
+                            color="primary",
+                            className="mt-3"
+                        ),
+                        dcc.Store(id='added-data-cache', data={}),
+                    ],
+                    style={'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem', 'display': 'block',
+                           'visibility': 'hidden'}
                 ),
 
-                # Dataset selection controls
+                # New elements for the left column as per user's image
                 dbc.Row([
                     dbc.Col(html.Label("Pick a Dataset :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
-                    create_dropdown('dataset-dropdown', dataset_options, 'Digits', "Dataset", 5),
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-upload me-2"), "New datapoint"],
-                        id="upload-new-datapoint-btn",
-                        className="ms-2 control-button"
-                    ), width=4)
-                ], className="mb-3 align-items-center"),
-
-                # Distance measure controls
-                dbc.Row([
-                    dbc.Col(html.Label("Distance measure :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
                     dbc.Col(dcc.Dropdown(
-                        id='dist-dropdown',
-                        options=[{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']],
-                        value='euclidean',
+                        id='dataset-dropdown',
+                        options=[
+                            {"label": name, "value": name} for name in [
+                                "Digits", "Iris", "Wine", "Breast Cancer",
+                                "MNIST", "Fashion MNIST", "Elephant"
+                            ]
+                        ] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}],
+                        value='Digits',
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
@@ -174,40 +97,108 @@ def create_layout(app):
                         persistence=True,
                         persistence_type='session'
                     ), width=5),
-
+                    dbc.Col(dbc.Button(
+                        [html.I(className="fas fa-upload me-2"), "New datapoint"],
+                        id="upload-new-datapoint-btn",
+                        className="ms-2 control-button"
+                    ), width=4)
                 ], className="mb-3 align-items-center"),
-
-                # Image space controls
+                
+                dbc.Row([
+                    dbc.Col(html.Label("Distance measure :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    dbc.Col(dcc.Dropdown(
+                        id='dist-dropdown',
+                        options=[{"label": name, "value": name} for name in ['euclidean', 'manhattan', 'haversine']],
+                        value='opt1',
+                        style={
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': '1px solid #dee2e6'
+                        },
+                        className="dash-bootstrap-dropdown custom-dropdown",
+                        optionHeight=35,
+                        persistence=True,
+                        persistence_type='session'
+                    ), width=5),
+                    dbc.Col(dbc.Button(
+                        [html.I(className="fas fa-upload me-2"), "Custom distance"],
+                        id="custom-distance-btn",
+                        className="ms-2 control-button"
+                    ), width=4)
+                ], className="mb-3 align-items-center"),
                 dbc.Row([
                     dbc.Col(html.Label("Image space :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
-                    create_dropdown('image-space-dropdown', image_space_options, 'Raw', "Image Space", 9)
+                    dbc.Col(dcc.Dropdown(
+                        id='image-space-dropdown',
+                        options=[{"label": name, "value": name} for name in ["layer 1", "layer 2", "layer 3", "final layer"]],
+                        value='Raw',
+                        style={
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': '1px solid #dee2e6'
+                        },
+                        className="dash-bootstrap-dropdown custom-dropdown",
+                        optionHeight=35,
+                        persistence=True,
+                        persistence_type='session'
+                    ), width=9)
                 ], className="mb-3 align-items-center"),
 
-                # Switches
                 dbc.Row([
                     dbc.Col([
-                        create_switch_row("Use Saved", "recalculate-switch", "Recalculate"),
-                        create_switch_row("Parametric mode", "parametric-iterative-switch", "Iterative mode"),
-                        create_switch_row("Dots", "dots-images-switch", "Images")
+                        dbc.Row([
+                            dbc.Col(html.P("Use Saved", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(dbc.Switch(
+                                id="recalculate-switch",
+                                value=False,
+                                className="me-2"
+                            ), width="auto"),
+                            dbc.Col(html.P("Recalculate", className="mb-0 text-white"), width="auto"),
+                        ], align="center", justify="between", className="mb-3"),
+                        dbc.Row([
+                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
+                            dbc.Col(dbc.Switch(
+                                id="parametric-iterative-switch",
+                                value=False,
+                                className="me-2"
+                            ), width="auto"),
+                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+
+                        ], align="center", justify="between", className="mb-3"),
+                        dbc.Row([
+                            dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(dbc.Switch(
+                                id="dots-images-switch",
+                                value=False,
+                                className="me-2"
+                            ), width="auto"),
+                            dbc.Col(html.P("Images", className="mb-0 text-white"), width="auto")
+                        ], align="center", justify="between", className="mb-3"),
                     ], width=12),
                 ]),
-
-                # Generative mode button
                 dbc.Col(dbc.Button(
-                    [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"],
-                    id="generative-mode-btn",
-                    className="mb-3 w-100 control-button"
-                ), width=12),
-
-                # Data stores
+                            [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"],
+                            id="generative-mode-btn",
+                            className="mb-3 w-100 control-button"
+                        ), width=12),
                 dcc.Store(id='embedding-cache', data={}),
-                dcc.Store(id='main-graph-images', data={}),
-
+                dbc.Col(dbc.Button(
+                            [html.I(className="fas fa-play"), "Generate grid"],
+                            id="grid-btn",
+                            className="mb-3 w-100 control-button"
+                        ), width=6),
             ], width=4),
+            
 
-            # Right Column (8/12 width): Main Graph and Thumbnails
+            # Right Column (8/12 idth): Main Graph and Thumbnails
             dbc.Col([
-                # Main graph and controls
+                # Recalculate switch (moved from here, but keeping placeholder comments for clarity)
+                # dbc.Row([ ... ]),
+
+                # Top Row: 3 teal buttons with icons (removed as per new design)
+                # dbc.Row([ ... ]),
+
+                # Row for Main Graph and Thumbnails
                 dbc.Row([
                     dbc.Col([
                         dcc.Loading(
@@ -220,24 +211,97 @@ def create_layout(app):
                                     config={'displayModeBar': True}
                                 ),
                                 html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'}),
+                                html.Div([
+                                    html.Label("Iterative process:", style={'margin-top': '1rem', 'margin-bottom': '0.5rem', 'font-weight': 'bold'}),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Button(
+                                                html.I(className="fas fa-play"),
+                                                id="slider-play-btn",
+                                                color="primary",
+                                                outline=True,
+                                                style={"margin-right": "0.5rem"}
+                                            ),
+                                            width="auto"
+                                        ),
+                                        dbc.Col(
+                                            dcc.Slider(
+                                                id='iteration-slider',
+                                                min=0,
+                                                max=10,
+                                                step=1,
+                                                value=0,
+                                                marks=None,
+                                                tooltip={"placement": "bottom", "always_visible": True},
+                                                updatemode='drag',
+                                                included=False,
+                                                className='mb-3'
+                                            ),
+                                            width=True
+                                        ),
+                                        dcc.Interval(
+                                            id='slider-interval',
+                                            interval=500,  # ms
+                                            n_intervals=0,
+                                            disabled=True
+                                        )
+                                    ], align="center", className="g-0"),
+                                ], id='iteration-process-container', style={'margin-bottom': '1rem'})
                             ],
                             fullscreen=False,
                             parent_style={'position': 'relative'},
                             style={'position': 'relative'}
-                        )
+                        ),
+
                     ], width=9),
 
-                    # Thumbnails
+                    # Thumbnails (right, vertical, stretch, now width=3)
                     dbc.Col([
                         html.Div([
-                            create_thumbnail("t-SNE", 'tsne-thumbnail', 'tsne-timing', 'tsne-thumbnail-click'),
-                            create_thumbnail("UMAP", 'umap-thumbnail', 'umap-timing', 'umap-thumbnail-click'),
-                            create_thumbnail("TRIMAP", 'trimap-thumbnail', 'trimap-timing', 'trimap-thumbnail-click', True)
+                            html.Div(
+                                id='tsne-thumbnail-click',
+                                className="method-button-container thumbnail-button mb-3",
+                                children=[
+                                    html.H4("t-SNE", className="text-center mb-2"),
+                                    html.Div(id='tsne-timing', className="timing-display"),
+                                    dcc.Graph(
+                                        id='tsne-thumbnail',
+                                        style={'height': '13vh'},
+                                        config={'displayModeBar': False, 'staticPlot': True}
+                                    )
+                                ]
+                            ),
+                            html.Div(
+                                id='umap-thumbnail-click',
+                                className="method-button-container thumbnail-button mb-3",
+                                children=[
+                                    html.H4("UMAP", className="text-center mb-2"),
+                                    html.Div(id='umap-timing', className="timing-display"),
+                                    dcc.Graph(
+                                        id='umap-thumbnail',
+                                        style={'height': '13vh'},
+                                        config={'displayModeBar': False, 'staticPlot': True}
+                                    )
+                                ]
+                            ),
+                            html.Div(
+                                id='trimap-thumbnail-click',
+                                className="method-button-container thumbnail-button mb-3 selected",
+                                children=[
+                                    html.H4("TRIMAP", className="text-center mb-2"),
+                                    html.Div(id='trimap-timing', className="timing-display"),
+                                    dcc.Graph(
+                                        id='trimap-thumbnail',
+                                        style={'height': '13vh'},
+                                        config={'displayModeBar': False, 'staticPlot': True}
+                                    )
+                                ]
+                            )
                         ], style={'display': 'flex', 'flexDirection': 'column', 'height': '60vh', 'justifyContent': 'space-between'})
                     ], width=3)
                 ]),
-
-                # Bottom row: Dataset Information and Augmentation
+                html.Div(id='umap-warning', style={'color': 'red', 'margin-bottom': '0.5rem'}),
+                # Bottom row: Dataset Information (left), Dataset Augmentation (right)
                 dbc.Row([
                     dbc.Col(
                         html.Div(
@@ -272,8 +336,8 @@ def create_layout(app):
                                 tooltip={"placement": "bottom", "always_visible": False},
                                 className='mb-3'
                             )
-                        ], style={'height': '100%', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'}),
-                        width=5
+                        ], style={'height': '100%', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'})
+                        , width=5
                     )
                 ])
             ], width=8)

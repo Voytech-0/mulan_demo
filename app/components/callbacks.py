@@ -1,37 +1,434 @@
-"""
-Callbacks for the MULAN demo app.
-Handles all interactive functionality and data processing.
-"""
+import json
 
 import jax.random as random
+from sklearn import datasets
+from sklearn.manifold import TSNE
+import plotly.express as px
+import plotly.graph_objects as go
 import dash
-from dash import dcc, html, Input, Output, callback_context, State, callback, ClientsideFunction
+from dash import dcc, html, Input, Output, callback_context, State, callback
 import numpy as np
 import threading
+import matplotlib
+import pandas as pd
 
-# Import utility modules
-from .dataset_loader import get_dataset
-from .embedding_computation import (
-    compute_trimap, compute_tsne, compute_umap, 
-    get_embedding_computation_function, check_method_availability
-)
-from .visualization_utils import create_figure, create_metadata_table, create_datapoint_image
+from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
+from .plot_maker import add_new_data_to_fig
+from .settings import get_image_style, get_no_image_message_style, get_generative_placeholder_style, CELL_STYLE, \
+    CELL_STYLE_RIGHT, TABLE_STYLE, EMPTY_METADATA_STYLE
+
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import time
+import io
+import base64
+from PIL import Image
+import tensorflow as tf
+import os
+import requests
+from io import BytesIO
 from .embedding_storage import save_embedding, load_embedding, embedding_exists
-from .feature_config import IMAGE_ONLY_DATASETS
-from .settings import (
-    get_image_style, get_generative_placeholder_style, get_no_image_message_style
-)
+from dash_canvas.utils import parse_jsonstring
+from math import ceil, floor
+import cv2
 
-# Global lock for computations
-computation_lock = threading.Lock()
 
-# Simple cache for generated images
+from .features import dynamically_add, generate_sample, dataset_shape
+from .plot_maker import encode_img_as_str, invisible_interactable_layer
+# Import TRIMAP from local package
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'google_research_trimap'))
+from google_research_trimap.trimap import trimap
+
+# Try to import UMAP, if available
 _image_cache = {}
+umap_available = False
+umap_lib = None # Use a distinct name for the imported module
+try:
+    import umap as umap_lib # Import as umap_lib
+    umap_available = True
+except ImportError:
+    pass # umap_lib remains None
 
+def load_fashion_mnist():
+    """Load Fashion MNIST dataset."""
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
+    # Combine train and test sets
+    X = np.concatenate([x_train, x_test])
+    y = np.concatenate([y_train, y_test])
+    # Reshape to 2D array and convert to float
+    X = X.reshape(X.shape[0], -1).astype(np.float32)
+    # Create a dataset-like object
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
+                               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+            # Add feature names for Fashion MNIST (pixel coordinates)
+            self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
+    return Dataset(X, y)
+
+def load_mnist():
+    """Load MNIST digits dataset."""
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    # Combine train and test sets
+    X = np.concatenate([x_train, x_test])
+    y = np.concatenate([y_train, y_test])
+    # Reshape to 2D array and convert to float
+    X = X.reshape(X.shape[0], -1).astype(np.float32)
+    # Create a dataset-like object
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = [str(i) for i in range(10)]
+            # Add feature names for MNIST (pixel coordinates)
+            self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
+    return Dataset(X, y)
+
+def load_elephant():
+    """Load elephant dataset from a sample image with variations."""
+    # URL of a sample elephant image from a reliable source
+    url = "https://upload.wikimedia.org/wikipedia/commons/3/37/African_Bush_Elephant.jpg"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        img = Image.open(BytesIO(response.content))
+        
+        # Convert to grayscale and resize
+        img = img.convert('L')
+        img = img.resize((28, 28))
+        
+        # Convert to numpy array
+        base_img = np.array(img)
+        
+        # Create variations of the image
+        n_samples = 10  # Create 10 variations
+        X = np.zeros((n_samples, 784))  # 28x28 = 784 pixels
+        
+        # Original image
+        X[0] = base_img.reshape(-1)
+        
+        # Create variations with different transformations
+        for i in range(1, n_samples):
+            # Random rotation
+            angle = np.random.uniform(-15, 15)
+            rotated = img.rotate(angle)
+            # Random brightness adjustment
+            brightness = np.random.uniform(0.8, 1.2)
+            adjusted = np.clip(np.array(rotated) * brightness, 0, 255).astype(np.uint8)
+            # Add some noise
+            noise = np.random.normal(0, 10, adjusted.shape).astype(np.uint8)
+            noisy = np.clip(adjusted + noise, 0, 255).astype(np.uint8)
+            X[i] = noisy.reshape(-1)
+        
+        y = np.zeros(n_samples)  # All samples are class 0 (elephant)
+        
+        # Create a dataset-like object
+        class Dataset:
+            def __init__(self, data, target):
+                self.data = data
+                self.target = target
+                self.target_names = ['Elephant']
+                # Add feature names for Elephant (pixel coordinates)
+                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
+        return Dataset(X, y)
+    except Exception as e:
+        print(f"Error loading elephant image: {str(e)}")
+        # Return a fallback dataset with multiple samples if image loading fails
+        n_samples = 10
+        X = np.random.rand(n_samples, 784)  # Random data
+        y = np.zeros(n_samples)
+        class Dataset:
+            def __init__(self, data, target):
+                self.data = data
+                self.target = target
+                self.target_names = ['Elephant']
+                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
+        return Dataset(X, y)
+
+# List of available datasets
+DATASET_LOADERS = {
+    "Digits": datasets.load_digits,
+    "Iris": datasets.load_iris,
+    "Wine": datasets.load_wine,
+    "Breast Cancer": datasets.load_breast_cancer,
+    "Fashion MNIST": load_fashion_mnist,
+    "MNIST": load_mnist,
+    "Elephant": load_elephant,
+}
+
+# Single global lock for computations
+numba_global_lock = threading.Lock()
+
+def get_dataset(name):
+    with numba_global_lock:
+        if name == 'custom_upload':
+            # Return a placeholder dataset for custom upload
+            # This will be handled by the upload functionality later
+            X = np.random.rand(10, 4)  # Placeholder data
+            y = np.zeros(10)  # Placeholder labels
+            class Dataset:
+                def __init__(self, data, target):
+                    self.data = data
+                    self.target = target
+                    self.target_names = ['Custom']
+                    self.feature_names = [f'Feature {i}' for i in range(data.shape[1])]
+            data = Dataset(X, y)
+        else:
+            loader = DATASET_LOADERS[name]
+            data = loader()
+            X = data.data
+            y = data.target
+    return X, y, data
+
+def compute_trimap(X, key):
+    start_time = time.time()
+    with numba_global_lock:
+        print('Starting TRIMAP calculation...')
+        
+        # Adjust n_inliers based on dataset size
+        n_points = X.shape[0]
+        n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
+        
+        # Time the nearest neighbor search
+        nn_start = time.time()
+        print('Finding nearest neighbors...')
+        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False)
+        nn_time = time.time() - nn_start
+        print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
+        
+        result = np.array(emb) if hasattr(emb, "shape") else emb
+        total_time = time.time() - start_time
+        print(f'Total TRIMAP calculation took: {total_time:.2f} seconds')
+    return result, total_time
+
+def compute_tsne(X):
+    start_time = time.time()
+    with numba_global_lock:
+        print('calculating tsne')
+        emb = TSNE(n_components=2, random_state=42).fit_transform(X)
+        result = np.array(emb)
+        print('tsne calculated')
+    return result, time.time() - start_time
+
+def compute_umap(X):
+    if not umap_available or umap_lib is None:
+        return None, 0
+    start_time = time.time()
+    with numba_global_lock:
+        print('calculating umap')
+        reducer = umap_lib.UMAP(n_components=2, random_state=42)
+        emb = reducer.fit_transform(X)
+        result = np.array(emb)
+        print('umap calculated')
+    return result, time.time() - start_time
+
+def create_datapoint_image(data_point, size=(20, 20)):
+    """Create a small image representation of a datapoint."""
+    # Create a cache key based on the data point and size
+    cache_key = (hash(data_point.tobytes()), size)
+
+    # Check if we have this image cached
+    if cache_key in _image_cache:
+        return _image_cache[cache_key]
+
+    # Normalize the data point to 0-1 range
+    normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
+    
+    # Reshape if needed (assuming square image)
+    side_length = int(np.sqrt(len(normalized)))
+    if side_length * side_length == len(normalized):
+        img_data = normalized.reshape(side_length, side_length)
+        # Use grayscale colormap for image datasets
+        cmap = 'gray'
+        # Adjust figure size based on the actual image dimensions
+        if side_length == 8:  # Digits dataset
+            fig_size = (size[0]/50, size[1]/50)  # Smaller for 8x8
+        else:  # MNIST/Fashion MNIST/Elephant (28x28)
+            fig_size = (size[0]/25, size[1]/25)  # Larger for 28x28
+    else:
+        # If not a perfect square, create a rectangular image
+        img_data = normalized.reshape(-1, 8)  # Arbitrary width of 8
+        # Use viridis for non-image datasets
+        cmap = 'viridis'
+        fig_size = (size[0]/100, size[1]/100)
+
+    # Create the image with higher DPI for sharper pixels
+    plt.figure(figsize=fig_size, dpi=300)  # Increased DPI from 100 to 300
+    plt.imshow(img_data, cmap=cmap, interpolation='nearest')  # Use nearest neighbor interpolation
+    plt.axis('off')
+    
+    # Convert to base64
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
+    plt.close()
+    buf.seek(0)
+    img_str = base64.b64encode(buf.read()).decode()
+    img_data_url = f"data:image/png;base64,{img_str}"
+
+    # Cache the result
+    _image_cache[cache_key] = img_data_url
+
+    # Limit cache size to prevent memory issues
+    if len(_image_cache) > 1000:
+        # Remove oldest entries (simple FIFO)
+        oldest_keys = list(_image_cache.keys())[:100]
+        for key in oldest_keys:
+            del _image_cache[key]
+
+    return img_data_url
+
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
+    if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
+        return px.scatter(title=f"{title} (no data)")
+    
+    # Create a list of customdata for each point, including the point index
+    point_indices = np.arange(len(y))
+
+    # If class_names is not provided, use unique values in y as strings
+    if class_names is None:
+        unique_classes = np.unique(y)
+        class_names = [str(c) for c in unique_classes]
+
+    # Map y to class names for legend
+    y_int = y.astype(int)
+    y_labels = [class_names[i] if 0 <= i < len(class_names) else str(i) for i in y_int]
+
+    unique_labels = pd.Series(y_labels).unique()
+    color_seq = px.colors.qualitative.Plotly
+    color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
+    n_original = len(y) - n_added
+    sections = [slice(0, n_original)]
+
+    visualize_added_samples = n_added > 0 and embedding.shape[0] == X.shape[0]
+    if visualize_added_samples:
+        sections.append(slice(n_original, None))
+
+    data_frames = []
+    for section in sections:
+        df = pd.DataFrame({
+            'x': embedding[section, 0],
+            'y': embedding[section, 1],
+            'point_index': point_indices[section],
+            'label': y_labels[section]
+        })
+        df['color'] = df['label'].map(color_map)
+        data_frames.append(df)
+
+    # Set category order for consistent color mapping
+    category_orders = {'color': class_names}
+
+    # Check if we should show images and if we have image data
+    df = data_frames[0]
+    if show_images and X is not None and len(X) > 0:
+        if len(X[0]) in [64, 784]:
+            max_images = 100
+            if len(X) > max_images:
+                step = len(X) // max_images
+                indices_to_show = list(range(0, len(X), step))[:max_images]
+                print(f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show)/len(X)*100:.1f}%)")
+            else:
+                indices_to_show = list(range(len(X)))
+                print(f"Showing all {len(indices_to_show)} images")
+            images = []
+            for i in indices_to_show:
+                img_str = create_datapoint_image(X[i], size=(15, 15))
+                images.append(img_str)
+            fig = px.scatter(
+                df,
+                x='x',
+                y='y',
+                color='color',
+                custom_data=['point_index', 'label'],
+                title=title,
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                category_orders=category_orders
+            )
+            fig.update_traces(
+                marker=dict(
+                    size=15,
+                    sizeref=1,
+                    sizemin=5,
+                    sizemode='diameter'
+                ),
+                selector=dict(type='scatter')
+            )
+            for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
+                x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
+                x_range = df['x'].max() - df['x'].min()
+                y_range = df['y'].max() - df['y'].min()
+                base_size = max(x_range, y_range) * 0.04
+                fig.add_layout_image(
+                    dict(
+                        source=img_str,
+                        xref="x",
+                        yref="y",
+                        x=x,
+                        y=y,
+                        sizex=base_size,
+                        sizey=base_size,
+                        xanchor="center",
+                        yanchor="middle"
+                    )
+                )
+        else:
+            fig = px.scatter(
+                df,
+                x='x',
+                y='y',
+                color='color',
+                custom_data=['point_index', 'label'],
+                title=title,
+                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                category_orders=category_orders
+            )
+    else:
+        fig = px.scatter(
+            df,
+            x='x',
+            y='y',
+            color='color',
+            custom_data=['point_index', 'label'],
+            title=title,
+            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+            category_orders=category_orders
+        )
+
+
+    # Additional points
+    if visualize_added_samples:
+        add_new_data_to_fig(fig, data_frames[1], color_map)
+
+    if is_thumbnail:
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(showticklabels=False, visible=False),
+            yaxis=dict(showticklabels=False, visible=False),
+            showlegend=False,
+            hovermode=False
+        )
+    else:
+        df = data_frames[0]
+        fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
+        fig.update_layout(
+            margin=dict(l=5, r=5, t=50, b=5)
+        )
+    return fig
+
+def create_metadata_display(dataset_name, data):
+    # This function is now mostly for the dataset-level metadata, not point-level
+    return html.Div([
+        html.H4(f"Dataset: {dataset_name}"),
+        # information abou the dataset
+        # html.P(f"{}   
+        html.P(f"Number of samples: {data.data.shape[0]}"),
+        html.P(f"Number of features: {data.data.shape[1]}"),
+        html.P(f"Number of classes: {len(np.unique(data.target))}")
+    ])
 
 def register_callbacks(app):
-    """Register all callbacks for the application."""
-    
     @app.callback(
         Output('main-graph', 'figure'),
         Output('trimap-thumbnail', 'figure'),
@@ -50,112 +447,150 @@ def register_callbacks(app):
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data'),
-        Input('dist-dropdown', 'value')
+        State('added-data-cache', 'data'),
     )
-    def update_graphs(dataset_name, recalculate_flag, show_images, 
-                     trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings, distance):
-        """Update all graphs based on dataset and method selection."""
-        
+    def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
+                      added_data_cache):
         if not dataset_name:
-            return [create_figure(None, [], "No dataset selected", "Label")] * 3 + ["", "", {}] + [""] * 3
+            return [px.scatter(title="No dataset selected")] * 3 + [""] * 7
+
+        # Handle None value for show_images (default to False)
+        if show_images is None:
+            show_images = False
+
+        # Get the dataset
+        X, y, data = get_dataset(dataset_name)
+        
+        # Initialize embeddings dictionary if not exists
+        if cached_embeddings is None:
+            cached_embeddings = {}
         
         # Determine which method was clicked
         ctx = callback_context
         if not ctx.triggered:
-            selected_method = 'trimap'  # Default
+            method = 'trimap'  # Default method
         else:
             trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            if 'trimap' in trigger_id:
-                selected_method = 'trimap'
-            elif 'tsne' in trigger_id:
-                selected_method = 'tsne'
-            elif 'umap' in trigger_id:
-                selected_method = 'umap'
+            if trigger_id == 'trimap-thumbnail-click':
+                method = 'trimap'
+            elif trigger_id == 'tsne-thumbnail-click':
+                method = 'tsne'
+            elif trigger_id == 'umap-thumbnail-click':
+                method = 'umap'
             else:
-                selected_method = 'trimap'
+                method = 'trimap'  # Default method
         
-        # Load dataset
-        try:
-            X, y, data = get_dataset(dataset_name)
-        except Exception as e:
-            error_fig = create_figure(None, [], f"Error loading dataset: {str(e)}", "Label", distance=distance, is_animation='trimap' in trigger_id)
-            return [error_fig] * 4 + ["Error loading dataset", "", {}, "", "", ""] 
+        # Initialize timing variables
+        trimap_time = 0
+        tsne_time = 0
+        umap_time = 0
         
-        # Initialize cache if needed
-        if cached_embeddings is None:
-            cached_embeddings = {}
-        
-        # Check UMAP availability
-        umap_warning = ""
-        if not check_method_availability('umap'):
-            umap_warning = "UMAP is not available. Please install it with: pip install umap-learn"
-        
-        # Compute embeddings
-        embeddings = {}
-        timings = {}
-        
-        for method in ['trimap', 'tsne', 'umap']:
-            if not check_method_availability(method):
-                embeddings[(method, distance)] = None
-                timings[(method, distance)] = "Not available"
-                continue
+        # Function to compute or load embeddings
+        def get_embedding(method_name, compute_func, *args):
+            nonlocal trimap_time, tsne_time, umap_time
             
-            # Check cache first
-            cache_key = f"{dataset_name}_{method}_{distance}"
-            if not recalculate_flag and cache_key in cached_embeddings:
-                embeddings[(method, distance)] = cached_embeddings[cache_key]['embedding']
-                timings[(method, distance)] = cached_embeddings[cache_key].get('timing', 'Cached')
-            else:
-                try:
-                    if method == 'trimap':
-                        embedding, timing = compute_trimap(X, distance)
-                    elif method == 'tsne':
-                        embedding, timing = compute_tsne(X, distance)
-                    elif method == 'umap':
-                        embedding, timing = compute_umap(X, distance)
-                    
-                    embeddings[(method, distance)] = embedding
-                    timings[(method, distance)] = f"{timing:.2f}s"
-                    
-                    # Cache the result
-                    cached_embeddings[cache_key] = {
-                        'embedding': embedding,
-                        'timing': timings[(method, distance)]
-                    }
-                    
-                except Exception as e:
-                    print(f"Error computing {method}: {e}")
-                    embeddings[method] = None
-                    timings[method] = f"Error: {str(e)}"
+            # Check if we should use saved embeddings
+            if not recalculate_flag and embedding_exists(dataset_name, method_name):
+                embedding, metadata = load_embedding(dataset_name, method_name)
+                if embedding is not None:
+                    # Update timing from metadata if available
+                    if metadata and 'time' in metadata:
+                        if method_name == 'trimap':
+                            trimap_time = metadata['time']
+                        elif method_name == 'tsne':
+                            tsne_time = metadata['time']
+                        elif method_name == 'umap':
+                            umap_time = metadata['time']
+                    print(f"Using saved {method_name} embedding")
+                    return embedding
+            
+            # Only compute new embedding if recalculate is True or no saved embedding exists
+            if recalculate_flag or not embedding_exists(dataset_name, method_name):
+                print(f"Computing new {method_name} embedding")
+                embedding, compute_time = compute_func(*args)
+
+                # Save the embedding if computation was successful
+                if embedding is not None:
+                    metadata = {'time': compute_time}
+                    save_embedding(dataset_name, method_name, embedding, metadata)
+
+                    # Update timing
+                    if method_name == 'trimap':
+                        trimap_time = compute_time
+                    elif method_name == 'tsne':
+                        tsne_time = compute_time
+                    elif method_name == 'umap':
+                        umap_time = compute_time
+
+                return embedding
+
+            return None  # Return None if no embedding is available and we're not computing
         
+        # Get embeddings for all methods
+        key = random.PRNGKey(0)
+        trimap_emb = get_embedding('trimap', compute_trimap, X, key)
+        tsne_emb = get_embedding('tsne', compute_tsne, X)
+        umap_emb = get_embedding('umap', compute_umap, X)
+
+        # Get class names for legend
+        class_names = getattr(data, 'target_names', None)
+
+        n_added = 0
+        for source in ['user_generated', 'augmented']:
+            if source in added_data_cache: # cache not empty
+                if source == 'user_generated':
+                    X_add = np.array(added_data_cache['user_generated'])
+                    y_add = np.zeros(X_add.shape[0]) - 1
+                else:
+                    X_add, y_add = added_data_cache['augmented']
+                n_added += len(X_add)
+                X = np.concatenate((X, X_add), axis=0)
+                y = np.concatenate((y, y_add), axis=0)
+                trimap_emb = dynamically_add(trimap_emb, X)
+
         # Create figures
         main_fig = create_figure(
-            embeddings[selected_method], y[:embeddings[selected_method].shape[0]], 
-            f"{selected_method.upper()} - {dataset_name}", 
-            "Class", X, False, show_images, class_names=data.target_names
+            trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
+            y,
+            f"{method.upper()} Embedding of {dataset_name}",
+            "Class",
+            X,
+            show_images=show_images,
+            class_names=class_names,
+            n_added=n_added
         )
         
-        trimap_fig = create_figure(
-            embeddings['trimap'], y[:embeddings['trimap'].shape[0]], "TRIMAP", "Class", X, True, False, class_names=data.target_names
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
+        
+        # UMAP warning
+        umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
+        
+        # Metadata display
+        metadata = create_metadata_display(dataset_name, data)
+        
+        # Update cache only if we have new embeddings
+        if recalculate_flag:
+            cached_embeddings[dataset_name] = {
+                'trimap': trimap_emb.tolist() if trimap_emb is not None else None,
+                'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
+                'umap': umap_emb.tolist() if umap_emb is not None else None
+            }
+        
+        return (
+            main_fig,
+            trimap_fig,
+            tsne_fig,
+            umap_fig,
+            umap_warning,
+            metadata,
+            cached_embeddings,
+            f"TRIMAP: {trimap_time:.2f}s",
+            f"t-SNE: {tsne_time:.2f}s",
+            f"UMAP: {umap_time:.2f}s"
         )
-        
-        tsne_fig = create_figure(
-            embeddings['tsne'], y[:embeddings['tsne'].shape[0]], "t-SNE", "Class", X, True, False, class_names=data.target_names
-        )
-        
-        umap_fig = create_figure(
-            embeddings['umap'], y[:embeddings['umap'].shape[0]], "UMAP", "Class", X, True, False, class_names=data.target_names
-        )
-        
-        # Create metadata display
-        metadata_display = create_metadata_table(dataset_name, data)
-        
-        return [
-            main_fig, trimap_fig, tsne_fig, umap_fig,
-            umap_warning, metadata_display, cached_embeddings,
-            timings['trimap'], timings['tsne'], timings['umap']
-        ]
-    
+
     @app.callback(
         Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
@@ -165,32 +600,28 @@ def register_callbacks(app):
         Input('recalculate-switch', 'value'),
         State('embedding-cache', 'data')
     )
-    def update_calculation_message(dataset_name, trimap_n_clicks, tsne_n_clicks, 
-                                 umap_n_clicks, recalculate_flag, cached_embeddings):
-        """Update calculation status message."""
-        
-        if not dataset_name:
-            return ""
-        
+    def update_calculation_message(dataset_name, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, recalculate_flag, cached_embeddings):
         ctx = callback_context
         if not ctx.triggered:
-            return ""
-        
+            return f"Loading dataset {dataset_name}..." # Initial state, no message
+
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        # For dataset loading
+        if trigger_id == 'dataset-dropdown':
+            return f"Loading dataset {dataset_name}..."
+
+        # For recalculation
+        elif trigger_id == 'recalculate-switch' and recalculate_flag:
+            return f"Recalculating embeddings for {dataset_name}..."
         
-        if 'dataset-dropdown' in trigger_id:
-            return f"Loading dataset: {dataset_name}"
-        elif 'recalculate-switch' in trigger_id:
-            if recalculate_flag:
-                return "Recalculating embeddings..."
-            else:
-                return "Using cached embeddings"
-        elif any(method in trigger_id for method in ['trimap', 'tsne', 'umap']):
-            method = next(method for method in ['trimap', 'tsne', 'umap'] if method in trigger_id)
-            return f"Switched to {method.upper()}"
-        
+        # For thumbnail clicks
+        elif trigger_id in ['trimap-thumbnail-click', 'tsne-thumbnail-click', 'umap-thumbnail-click']:
+            method_name = trigger_id.replace('-thumbnail-click', '').upper()
+            return f"Calculating {method_name} embedding..."
+
         return ""
-    
+
     @app.callback(
         Output('selected-image', 'src'),
         Output('selected-image', 'style'),
@@ -202,56 +633,162 @@ def register_callbacks(app):
         Input('main-graph', 'clickData'),
         Input('generative-mode-state', 'data'),
         State('dataset-dropdown', 'value'),
-        State('main-graph', 'figure')
+        State('main-graph', 'figure'),
+        State('embedding-cache', 'data')
     )
-    def display_clicked_point(clickData, generative_state, dataset_name, figure):
-        """Display details of clicked point."""
+    def display_clicked_point(clickData, generative_state, dataset_name, figure, embedding_cache):
+        enabled = generative_state.get('enabled', False) if generative_state else False
+
+        if not clickData:
+            # Return default states when nothing is clicked
+            return (
+                '',  # selected-image src
+                get_image_style('none'),  # selected-image style
+                get_no_image_message_style('block'),  # no-image-message style
+                "",  # coordinates-display children
+                "",  # point-metadata children
+                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem',
+                 'color': '#666'},  # click-message style
+                get_generative_placeholder_style('none')  # generative-mode-placeholder style
+            )
+
+        if enabled:
+            x_coord = clickData['points'][0]['x']
+            y_coord = clickData['points'][0]['y']
+            X, _, _ = get_dataset(dataset_name)
+            embedding, _ = load_embedding(dataset_name, 'trimap')
+            sample = generate_sample(x_coord, y_coord, X, embedding)
+            img_str = encode_img_as_str(sample, dataset_name)
+            # In generative mode, show placeholder and hide other image elements
+            return (
+                f'data:image/png;base64,{img_str}',
+                get_image_style('none'), # selected-image style
+                get_no_image_message_style('none'), # no-image-message style
+                "", # coordinates-display children
+                "", # point-metadata children
+                {'display': 'none'}, # click-message style
+                get_generative_placeholder_style('block') # generative-mode-placeholder style
+            )
         
-        if not clickData or not dataset_name:
-            return "", get_image_style('none'), get_no_image_message_style('block'), "", "", {}, get_generative_placeholder_style('none')
+        # Defensive: check for 'customdata' in clickData['points'][0]
+        point_data = clickData['points'][0]
+        if 'customdata' in point_data:
+            point_index = int(point_data['customdata'][0])
+            digit_label = point_data['customdata'][1]
+        else:
+            # Fallback: try to use pointNumber or index
+            point_index = point_data.get('pointIndex', 0)
+            # Try to get the class label from the color/category
+            digit_label = point_data.get('curveNumber', '')
+            # If color/class name is present in 'text' or 'label', use it
+            digit_label = point_data.get('label', point_data.get('text', str(point_index)))
+        X, y, data = get_dataset(dataset_name)
         
-        # Check if in generative mode
-        if generative_state and generative_state.get('enabled', False):
-            return "", get_image_style('none'), get_no_image_message_style('none'), "", "", {}, get_generative_placeholder_style('block')
+        # Get features to display from configuration or use default feature names
+        features_to_display = DATASET_FEATURES.get(dataset_name, getattr(data, 'feature_names', [f'Feature {i}' for i in range(X.shape[1])]))
         
-        try:
-            point_index = clickData['points'][0]['pointIndex']
-            X, y, data = get_dataset(dataset_name)
+        # Get the real class label
+        if hasattr(data, 'target_names'):
+            # If y is integer index, map to class name
+            class_label = data.target_names[y[point_index]] if int(y[point_index]) < len(data.target_names) else str(y[point_index])
+        else:
+            class_label = f"Class {y[point_index]}"
             
-            # Create image if it's an image dataset
+        # Get the coordinates from the figure
+        x_coord = point_data['x']
+        y_coord = point_data['y']
+        
+        # Create coordinates display with all requested fields
+        coordinates_table = html.Table([
+            html.Thead(
+                html.Tr([
+                    html.Th("Property", style=CELL_STYLE),
+                    html.Th("Value", style=CELL_STYLE_RIGHT)
+                ])
+            ),
+            html.Tbody([
+                html.Tr([
+                    html.Td("Sample", style=CELL_STYLE),
+                    html.Td(f"#{point_index}", style=CELL_STYLE_RIGHT)
+                ]),
+                html.Tr([
+                    html.Td("Class", style=CELL_STYLE),
+                    html.Td(class_label, style=CELL_STYLE_RIGHT)
+                ]),
+                html.Tr([
+                    html.Td("Label", style=CELL_STYLE),
+                    html.Td(digit_label, style=CELL_STYLE_RIGHT)
+                ]),
+                html.Tr([
+                    html.Td("X Coordinate", style=CELL_STYLE),
+                    html.Td(f"{x_coord:.4f}", style=CELL_STYLE_RIGHT)
+                ]),
+                html.Tr([
+                    html.Td("Y Coordinate", style=CELL_STYLE),
+                    html.Td(f"{y_coord:.4f}", style=CELL_STYLE_RIGHT)
+                ])
+            ])
+        ], style=TABLE_STYLE)
+        
+        # Create metadata table
+        metadata_table = html.Table([
+            html.Thead(
+                html.Tr([
+                    html.Th("Feature", style=CELL_STYLE),
+                    html.Th("Value", style=CELL_STYLE_RIGHT)
+                ])
+            ),
+            html.Tbody([
+                html.Tr([
+                    html.Td(name, style=CELL_STYLE),
+                    html.Td(f"{value:.4f}", style=CELL_STYLE_RIGHT)
+                ])
+                for name, value in zip(features_to_display, X[point_index][:len(features_to_display)])
+            ])
+        ], style=TABLE_STYLE)
+        
+        # For image datasets (Digits, MNIST, Fashion MNIST, Elephant), create and display the image
+        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant"]:
+            img_str = encode_img_as_str(X[point_index], dataset_name)
+
+            # For image-only datasets, show empty metadata
             if dataset_name in IMAGE_ONLY_DATASETS:
-                img_src = create_datapoint_image(X[point_index])
-                img_style = get_image_style('block')
-                no_img_style = get_no_image_message_style('none')
+                metadata_content = html.Div("No meaningful metadata to display for image data",
+                                          style=EMPTY_METADATA_STYLE)
             else:
-                img_src = ""
-                img_style = get_image_style('none')
-                no_img_style = get_no_image_message_style('block')
-            
-            # Create coordinates display
-            if 'figure' in figure and 'data' in figure:
-                coords = figure['data'][0]
-                if 'x' in coords and 'y' in coords:
-                    x_val = coords['x'][point_index]
-                    y_val = coords['y'][point_index]
-                    coords_display = f"X: {x_val:.4f}\nY: {y_val:.4f}"
-                else:
-                    coords_display = "Coordinates not available"
-            else:
-                coords_display = "Coordinates not available"
-            
-            # Create metadata display
-            metadata_display = create_metadata_table(dataset_name, data, point_index)
-            
-            # Update click message
-            click_message_style = {'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#28a745'}
-            
-            return img_src, img_style, no_img_style, coords_display, metadata_display, click_message_style, get_generative_placeholder_style('none')
-            
-        except Exception as e:
-            print(f"Error displaying clicked point: {e}")
-            return "", get_image_style('none'), get_no_image_message_style('block'), "", "", {}, get_generative_placeholder_style('none')
-    
+                metadata_content = metadata_table
+
+            return (
+                f'data:image/png;base64,{img_str}',
+                get_image_style('block'),
+                get_no_image_message_style('none'),
+                coordinates_table,
+                metadata_content,
+                {'display': 'none'}, # Hide click message
+                get_generative_placeholder_style('none') # Hide generative mode placeholder
+            )
+        
+        # For other datasets, show no image message and metadata
+        # For image-only datasets, show empty metadata
+        if dataset_name in IMAGE_ONLY_DATASETS:
+            metadata_content = html.Div("No meaningful metadata to display for image data",
+                                      style=EMPTY_METADATA_STYLE)
+        else:
+            metadata_content = metadata_table
+
+        return (
+            '',
+            get_image_style('none'),
+            get_no_image_message_style('block'),
+            coordinates_table,
+            metadata_content,
+            {'display': 'none'}, # Hide click message
+            get_generative_placeholder_style('none') # Hide generative mode placeholder
+        )
+
+    # Callbacks for the new UI elements in the left panel
+
+    # Generative Mode Button Toggle
     @app.callback(
         Output('generative-mode-btn', 'color'),
         Output('generative-mode-btn', 'children'),
@@ -261,18 +798,18 @@ def register_callbacks(app):
         prevent_initial_call=True
     )
     def toggle_generative_mode(n_clicks, current_state):
-        """Toggle generative mode on/off."""
-        
-        if current_state is None:
-            current_state = {'enabled': False}
-        
-        new_state = not current_state.get('enabled', False)
-        
-        if new_state:
-            return "success", [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], {'enabled': True}
+        if n_clicks is None:
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
+
+        # Toggle the state
+        new_enabled = not current_state.get('enabled', False)
+
+        if new_enabled:
+            return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], {'enabled': True}
         else:
-            return "primary", [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
-    
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
+
+    # Callback to show/hide iterative slider based on generative mode
     @app.callback(
         Output('iteration-slider', 'className'),
         Output('slider-play-btn', 'style'),
@@ -280,152 +817,213 @@ def register_callbacks(app):
         prevent_initial_call=False
     )
     def toggle_iterative_slider(generative_state):
-        """Toggle iterative slider visibility based on generative mode."""
-        
-        if generative_state and generative_state.get('enabled', False):
-            return 'd-none', {'display': 'none'}
+        enabled = generative_state.get('enabled', False) if generative_state else False
+
+        if enabled:
+            # Hide the slider and play button when generative mode is on
+            return 'mb-3 d-none', {'display': 'none'}
         else:
-            return 'mb-3', {'margin-right': '0.5rem'}
-    
+            # Show the slider and play button when generative mode is off
+            return 'mb-3', {'display': 'block'}
+
+    # Callback to show/hide iterative process label based on generative mode
     @app.callback(
         Output('iteration-process-container', 'style'),
         Input('generative-mode-state', 'data'),
         prevent_initial_call=False
     )
     def toggle_iterative_process_label(generative_state):
-        """Toggle iterative process container visibility."""
-        
-        if generative_state and generative_state.get('enabled', False):
+        enabled = generative_state.get('enabled', False) if generative_state else False
+
+        if enabled:
+            # Hide the entire iterative process container when generative mode is on
             return {'display': 'none'}
         else:
-            return {'margin-bottom': '1rem'}
-    
+            # Show the iterative process container when generative mode is off
+            return {'display': 'block'}
+
+    # Distance Measure Buttons (Mutually Exclusive)
     @app.callback(
-        [Output(f'{method}-thumbnail-click', 'className') for method in ['tsne', 'umap', 'trimap']],
-        [Input(f'{method}-thumbnail-click', 'n_clicks') for method in ['tsne', 'umap', 'trimap']],
+        [Output(f'dist-opt{i}-btn', 'className') for i in range(1, 3)] + [Output('dist-upload-btn', 'className')],
+        [Input(f'dist-opt{i}-btn', 'n_clicks') for i in range(1, 3)] + [Input('dist-upload-btn', 'n_clicks')],
+        prevent_initial_call=True
+    )
+    def select_distance_measure(*n_clicks):
+        ctx = callback_context
+        if not ctx.triggered:
+            # Default state, make the first one selected
+            classes = ['control-button'] * 3
+            classes[0] = 'control-button selected'
+            return classes
+
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        classes = ['control-button'] * 3
+
+        if button_id == 'dist-opt1-btn':
+            classes[0] = 'control-button selected'
+        elif button_id == 'dist-opt2-btn':
+            classes[1] = 'control-button selected'
+        elif button_id == 'dist-upload-btn':
+            classes[2] = 'control-button selected'
+        return classes
+
+    # Layer Buttons (Mutually Exclusive)
+    @app.callback(
+        [Output(f'layer-opt{i}-btn', 'className') for i in range(1, 4)],
+        [Input(f'layer-opt{i}-btn', 'n_clicks') for i in range(1, 4)],
+        prevent_initial_call=True
+    )
+    def select_layer(*n_clicks):
+        ctx = callback_context
+        if not ctx.triggered:
+            # Default state, make the first one selected
+            classes = ['control-button'] * 3
+            classes[0] = 'control-button selected'
+            return classes
+
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        classes = ['control-button'] * 3
+
+        if button_id == 'layer-opt1-btn':
+            classes[0] = 'control-button selected'
+        elif button_id == 'layer-opt2-btn':
+            classes[1] = 'control-button selected'
+        elif button_id == 'layer-opt3-btn':
+            classes[2] = 'control-button selected'
+        return classes
+
+    # Method Buttons (Mutually Exclusive)
+    @app.callback(
+        Output('tsne-thumbnail-click', 'className'),
+        Output('umap-thumbnail-click', 'className'),
+        Output('trimap-thumbnail-click', 'className'),
+        Input('tsne-thumbnail-click', 'n_clicks'),
+        Input('umap-thumbnail-click', 'n_clicks'),
+        Input('trimap-thumbnail-click', 'n_clicks'),
         prevent_initial_call=True
     )
     def select_method_button(tsne_n_clicks, umap_n_clicks, trimap_n_clicks):
-        """Update method button selection states."""
-        
         ctx = callback_context
         if not ctx.triggered:
-            return ["method-button-container thumbnail-button mb-3"] * 3
+            # Default state, TRIMAP is initially selected
+            return "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3 selected"
+
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
         
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        tsne_class = "method-button-container thumbnail-button mb-3"
+        umap_class = "method-button-container thumbnail-button mb-3"
+        trimap_class = "method-button-container thumbnail-button mb-3"
+
+        if button_id == 'tsne-thumbnail-click':
+            tsne_class = "method-button-container thumbnail-button mb-3 selected"
+        elif button_id == 'umap-thumbnail-click':
+            umap_class = "method-button-container thumbnail-button mb-3 selected"
+        elif button_id == 'trimap-thumbnail-click':
+            trimap_class = "method-button-container thumbnail-button mb-3 selected"
         
-        classes = []
-        for method in ['tsne', 'umap', 'trimap']:
-            if f'{method}-thumbnail-click' in trigger_id:
-                classes.append("method-button-container thumbnail-button mb-3 selected")
-            else:
-                classes.append("method-button-container thumbnail-button mb-3")
-        
-        return classes
-    
+        return tsne_class, umap_class, trimap_class
+
+    # Callback for Upload Custom Dataset dropdown option
     @app.callback(
         Output('umap-warning', 'children', allow_duplicate=True), 
         Input('dataset-dropdown', 'value'),
         prevent_initial_call=True
     )
     def handle_custom_dataset_upload_dropdown(dataset_value):
-        """Handle custom dataset upload dropdown selection."""
-        
         if dataset_value == 'custom_upload':
-            return "Custom dataset upload functionality coming soon!"
-        return ""
-    
+            return "Please use the 'Upload new datapoint' button to upload a custom dataset." 
+        return "" 
+
+    # Callback for Upload New Datapoint button
     @app.callback(
-        Output('calculation-status', 'children', allow_duplicate=True), 
+        Output('image-display', 'style'),
+        Output('image-draw', 'style'),
         Input('upload-new-datapoint-btn', 'n_clicks'),
         prevent_initial_call=True
     )
     def handle_upload_new_datapoint_button(n_clicks):
-        """Handle new datapoint upload button click."""
-        
-        return "New datapoint upload functionality coming soon!"
-    
+        # Dynamic transforms
+        style1 = {'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem',
+                  'display': 'block', 'visibility': 'hidden'}
+        style2 = style1.copy()
+        style2['height'] = '56vh'
+        style2['visibility'] = 'visible'
+        if n_clicks % 2 == 0:
+            style1, style2 = style2, style1
+        return style1, style2
+
+    @app.callback(
+        Output('canvas', 'json_data'),  # Clear the canvas
+        Output('added-data-cache', 'data', allow_duplicate=True),  # Store processed data
+        Input('submit_drawing', 'n_clicks'),
+        State('canvas', 'json_data'),
+        State('added-data-cache', 'data'),
+        State('dataset-dropdown', 'value'),
+        prevent_initial_call=True
+    )
+    def submit_and_clear(n_clicks, json_data, added_data_cache, dataset_name):
+        if not json_data:
+            return dash.no_update, dash.no_update
+
+        canvas_shape = (500, 500)
+        mask = parse_jsonstring(json_data, canvas_shape)
+
+        # Crop to content
+        ys, xs = np.where(mask)
+        left, right = xs.min(), xs.max()
+        top, bottom = ys.min(), ys.max()
+        width, height = right - left, bottom - top
+        largest_dim = max(width, height)
+        pad = (largest_dim - width) / 2, (largest_dim - height) / 2
+        mask = mask[left - ceil(pad[0]):right + floor(pad[0]), top - ceil(pad[1]):bottom + floor(pad[1])]
+
+        processed = mask.astype(float)
+        img_shape = dataset_shape(dataset_name)
+
+        processed = cv2.resize(processed, img_shape)
+        processed = np.reshape(processed, -1)
+        if 'user_generated' not in added_data_cache:
+            added_data_cache['user_generated'] = []
+        added_data_cache['user_generated'].append(processed)
+
+        return "", added_data_cache
+
+    @app.callback(
+        Output('added-data-cache', 'data', allow_duplicate=True),  # Store processed data
+        Input('brightness-slider', 'value'),
+        Input('contrast-slider', 'value'),
+        State('added-data-cache', 'data'),
+        State('dataset-dropdown', 'value'),
+        prevent_initial_call=True
+    )
+    def augment_data(brightness, contrast, data_cache, dataset_name, n_samples=100):
+        X, y, _ = get_dataset(dataset_name)
+        random_indices = np.random.choice(len(X), n_samples, replace=False)
+        X, y = X[random_indices], y[random_indices]
+        X = contrast * X + (brightness - 1)
+        X = np.clip(X, 0, 1).astype(float)
+        data_cache['augmented'] = (X, y)
+        return data_cache
+
+    # Callback to show/hide metadata row based on dataset type
     @app.callback(
         Output('point-metadata-row', 'style'),
         Input('dataset-dropdown', 'value'),
         prevent_initial_call=False
     )
     def toggle_metadata_row(dataset_name):
-        """Toggle metadata row visibility based on dataset type."""
-        
         if dataset_name in IMAGE_ONLY_DATASETS:
+            # Hide the metadata row for image-only datasets
             return {'display': 'none'}
         else:
+            # Show the metadata row for datasets with meaningful features
             return {'display': 'block'}
-    
-    @app.callback(
-        Output('main-graph-images', 'data'),
-        Input('main-graph', 'figure'),
-        State('dots-images-switch', 'value')
-    )
-    def store_image_data(figure, show_images):
-        """Store image data for main graph."""
-        
-        if not show_images or not figure or 'data' not in figure:
-            return {}
-        
-        return {'figure': figure, 'show_images': show_images}
-    
-    @app.callback(
-        Output('main-graph', 'figure', allow_duplicate=True),
-        Input('main-graph', 'relayoutData'),
-        State('main-graph', 'figure'),
-        State('main-graph-images', 'data'),
-        State('dots-images-switch', 'value'),
-        prevent_initial_call=True
-    )
-    def update_image_sizes_on_zoom(relayout_data, figure, stored_images, show_images):
-        """Update image sizes when zooming."""
-        
-        if not show_images or not stored_images or 'figure' not in stored_images:
-            return figure
-        
-        # This is a placeholder for image size adjustment on zoom
-        # In a full implementation, you would adjust image sizes based on zoom level
-        return figure
-    
-    
-    @app.callback(
-        Output("full-grid-container", "style"),
-        Input("full-grid-btn", "n_clicks"),
-        State("full-grid-container", "style"),
-        prevent_initial_call=True
-    )
-    def toggle_full_grid(n_clicks, current_style):
-        if current_style and current_style.get("display") == "block":
-            return {**current_style, "display": "none"}
-        return {**current_style, "display": "block"}
 
-    from dash import html
-    from .dataset_loader import get_dataset
-    from .visualization_utils import create_datapoint_image
-    from .feature_config import IMAGE_ONLY_DATASETS
+    # Existing callbacks (ensure they are still present after the edit)
 
-    @app.callback(
-        Output("full-grid-container", "children"),
-        Input("full-grid-btn", "n_clicks"),
-        State("dataset-dropdown", "value"),
-        prevent_initial_call=True
-    )
-    def populate_full_grid(n_clicks, dataset_name):
-        if not dataset_name or dataset_name not in IMAGE_ONLY_DATASETS:
-            return html.Div("Full grid is only available for image datasets.", style={"color": "white"})
+    # Main callback to update graphs and metadata based on dataset-dropdown
+    # ... (existing update_graphs and update_calculation_message) ...
+    # (No changes to the existing update_graphs and update_calculation_message, but keeping this comment for clarity)
 
-        X, y, _ = get_dataset(dataset_name)
-
-        # Limit to 100 images for performance
-        max_images = min(len(X), 100)
-
-        images = []
-        for i in range(max_images):
-            img_src = create_datapoint_image(X[i])
-            if img_src:
-                images.append(html.Img(src=img_src, style={"width": "60px", "height": "60px", "margin": "4px"}))
-
-        return html.Div(images, style={"display": "flex", "flex-wrap": "wrap"})
-
+    # Note: The callbacks for top-grid and bottom-grid buttons were removed in the layout update.
+    # If new buttons are added that need similar functionality, new callbacks will be needed.
