@@ -60,8 +60,6 @@ def create_thumbnail(method_name, graph_id, timing_id, click_id, is_selected=Fal
     )
 
 
-from dash.dependencies import Input, Output
-
 def create_layout(app):
     """Create the main application layout."""
 
@@ -80,7 +78,6 @@ def create_layout(app):
     image_space_options = [{"label": name, "value": name} for name in ["layer 1", "layer 2", "layer 3", "final layer"]]
 
     return html.Div([
-        dcc.Store(id="distance-measure-store", data="euclidean"),
         html.H1("Manifold Learning Visualizations", className="text-center mb-4"),
         dcc.Store(id='generative-mode-state', data={'enabled': False}),
 
@@ -223,7 +220,6 @@ def create_layout(app):
                                     config={'displayModeBar': True}
                                 ),
                                 html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'}),
-
                             ],
                             fullscreen=False,
                             parent_style={'position': 'relative'},
@@ -234,56 +230,12 @@ def create_layout(app):
                     # Thumbnails
                     dbc.Col([
                         html.Div([
-                            html.Div(
-                                id='tsne-thumbnail-click',
-                                className="method-button-container thumbnail-button mb-3",
-                                children=[
-                                    html.H4("t-SNE", className="text-center mb-2"),
-                                    html.Div(id='tsne-timing', className="timing-display"),
-                                    dcc.Graph(
-                                        id='tsne-thumbnail',
-                                        style={'height': '13vh'},
-                                        config={'displayModeBar': False, 'staticPlot': True}
-                                    )
-                                ],
-                                n_clicks=0,
-                                **{"data-disabled": True}  # This will be toggled by a callback
-                            ),
-                            html.Div(
-                                id='umap-thumbnail-click',
-                                className="method-button-container thumbnail-button mb-3",
-                                children=[
-                                    html.H4("UMAP", className="text-center mb-2"),
-                                    html.Div(id='umap-timing', className="timing-display"),
-                                    dcc.Graph(
-                                        id='umap-thumbnail',
-                                        style={'height': '13vh'},
-                                        config={'displayModeBar': False, 'staticPlot': True}
-                                    )
-                                ]
-                            ),
-                            html.Div(
-                                id='trimap-thumbnail-click',
-                                className="method-button-container thumbnail-button mb-3 selected",
-                                children=[
-                                    html.H4("TRIMAP", className="text-center mb-2"),
-                                    html.Div(id='trimap-timing', className="timing-display"),
-                                    dcc.Graph(
-                                        id='trimap-thumbnail',
-                                        style={'height': '13vh'},
-                                        config={'displayModeBar': False, 'staticPlot': True}
-                                    )
-                                ]
-                            )
                             create_thumbnail("t-SNE", 'tsne-thumbnail', 'tsne-timing', 'tsne-thumbnail-click'),
                             create_thumbnail("UMAP", 'umap-thumbnail', 'umap-timing', 'umap-thumbnail-click'),
                             create_thumbnail("TRIMAP", 'trimap-thumbnail', 'trimap-timing', 'trimap-thumbnail-click', True)
                         ], style={'display': 'flex', 'flexDirection': 'column', 'height': '60vh', 'justifyContent': 'space-between'})
                     ], width=3)
                 ]),
-
-                # Warning message
-                html.Div(id='umap-warning', style={'color': 'red', 'margin-bottom': '0.5rem'}),
 
                 # Bottom row: Dataset Information and Augmentation
                 dbc.Row([

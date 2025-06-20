@@ -49,10 +49,11 @@ def register_callbacks(app):
         Input('trimap-thumbnail-click', 'n_clicks'),
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
-        State('embedding-cache', 'data')
+        State('embedding-cache', 'data'),
+        Input('dist-dropdown', 'value')
     )
     def update_graphs(dataset_name, recalculate_flag, show_images, 
-                     trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings):
+                     trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings, distance):
         """Update all graphs based on dataset and method selection."""
         
         if not dataset_name:
@@ -77,7 +78,7 @@ def register_callbacks(app):
         try:
             X, y, data = get_dataset(dataset_name)
         except Exception as e:
-            error_fig = create_figure(None, [], f"Error loading dataset: {str(e)}", "Label")
+            error_fig = create_figure(None, [], f"Error loading dataset: {str(e)}", "Label", distance=distance, is_animation='trimap' in trigger_id)
             return [error_fig] * 4 + ["Error loading dataset", "", {}, "", "", ""] 
         
         # Initialize cache if needed
@@ -95,32 +96,31 @@ def register_callbacks(app):
         
         for method in ['trimap', 'tsne', 'umap']:
             if not check_method_availability(method):
-                embeddings[method] = None
-                timings[method] = "Not available"
+                embeddings[(method, distance)] = None
+                timings[(method, distance)] = "Not available"
                 continue
             
             # Check cache first
-            cache_key = f"{dataset_name}_{method}"
+            cache_key = f"{dataset_name}_{method}_{distance}"
             if not recalculate_flag and cache_key in cached_embeddings:
-                embeddings[method] = cached_embeddings[cache_key]['embedding']
-                timings[method] = cached_embeddings[cache_key].get('timing', 'Cached')
+                embeddings[(method, distance)] = cached_embeddings[cache_key]['embedding']
+                timings[(method, distance)] = cached_embeddings[cache_key].get('timing', 'Cached')
             else:
                 try:
                     if method == 'trimap':
-                        key = random.PRNGKey(42)
-                        embedding, timing = compute_trimap(X, key)
+                        embedding, timing = compute_trimap(X, distance)
                     elif method == 'tsne':
-                        embedding, timing = compute_tsne(X)
+                        embedding, timing = compute_tsne(X, distance)
                     elif method == 'umap':
-                        embedding, timing = compute_umap(X)
+                        embedding, timing = compute_umap(X, distance)
                     
-                    embeddings[method] = embedding
-                    timings[method] = f"{timing:.2f}s"
+                    embeddings[(method, distance)] = embedding
+                    timings[(method, distance)] = f"{timing:.2f}s"
                     
                     # Cache the result
                     cached_embeddings[cache_key] = {
                         'embedding': embedding,
-                        'timing': timings[method]
+                        'timing': timings[(method, distance)]
                     }
                     
                 except Exception as e:

@@ -14,7 +14,10 @@ try:
     import umap
     UMAP_AVAILABLE = True
 except ImportError:
-    UMAP_AVAILABLE = False
+    try:
+        import umap.umap_ as umap
+    except ImportError:
+        UMAP_AVAILABLE = False
 
 # Try to import TRIMAP from local package
 try:
@@ -30,20 +33,20 @@ except ImportError:
 COMPUTATION_LOCK = threading.Lock()
 
 
-def compute_trimap(X, key):
+def compute_trimap(X, distance):
     """
     Compute TRIMAP embedding.
     
     Args:
         X: Input data matrix
-        key: JAX random key
         
     Returns:
         Tuple of (embedding, computation_time)
     """
     if not TRIMAP_AVAILABLE:
         raise ImportError("TRIMAP is not available")
-    
+
+    key = random.PRNGKey(42)
     start_time = time.time()
     
     with COMPUTATION_LOCK:
@@ -56,7 +59,7 @@ def compute_trimap(X, key):
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', verbose=False)
+        emb = trimap.transform(key, X, n_inliers=n_inliers, distance='euclidean', output_metric=distance, auto_diff=False, verbose=False)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
         
@@ -67,7 +70,7 @@ def compute_trimap(X, key):
     return result, total_time
 
 
-def compute_tsne(X):
+def compute_tsne(X, distance):
     """
     Compute t-SNE embedding.
     
@@ -78,6 +81,9 @@ def compute_tsne(X):
         Tuple of (embedding, computation_time)
     """
     start_time = time.time()
+    if distance == 'haversine' and X.shape[1] == 2:
+        print("t-SNE does not support 'haversine' distance for dimension != 2")
+        return None, None
     
     with COMPUTATION_LOCK:
         print('Starting t-SNE calculation...')
@@ -89,7 +95,7 @@ def compute_tsne(X):
         else:
             X_subset = X
         
-        tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, X_subset.shape[0] - 1))
+        tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, X_subset.shape[0] - 1), metric=distance)
         result = tsne.fit_transform(X_subset)
         
         # If we used a subset, we need to handle the full dataset
@@ -104,7 +110,7 @@ def compute_tsne(X):
     return result, total_time
 
 
-def compute_umap(X):
+def compute_umap(X, distance):
     """
     Compute UMAP embedding.
     
@@ -129,7 +135,7 @@ def compute_umap(X):
         else:
             X_subset = X
         
-        reducer = umap.UMAP(n_components=2, random_state=42)
+        reducer = umap.UMAP(n_components=2, random_state=42, output_metric=distance)
         result = reducer.fit_transform(X_subset)
         
         # If we used a subset, we need to handle the full dataset
