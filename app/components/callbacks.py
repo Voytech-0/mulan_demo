@@ -198,19 +198,19 @@ def compute_trimap(X, distance):
         # Time the nearest neighbor search
         nn_start = time.time()
         print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, output_metric=distance, auto_diff=False, export_iters=False)
+        emb = trimap.transform(key, X, n_inliers=n_inliers, output_metric=distance, auto_diff=False, export_iters=True)
         nn_time = time.time() - nn_start
         print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
         
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
     if distance == 'haversine':
-        # x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]), np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
-        # y = -np.arccos(np.cos(result[:, :, 0]))
-        # result = np.stack([x, y], axis=-1)
-        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        y = -np.arccos(np.cos(result[:, 0]))
-        result = np.column_stack((x, y))
+        x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]), np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
+        y = -np.arccos(np.cos(result[:, :, 0]))
+        result = np.stack([x, y], axis=-1)
+        # x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+        # y = -np.arccos(np.cos(result[:, 0]))
+        # result = np.column_stack((x, y))
     return result, total_time
 
 
@@ -296,10 +296,145 @@ def create_datapoint_image(data_point, size=(20, 20)):
 
     return img_data_url
 
+def create_animated_figure(embedding, y, title, label_name):
+    print(type(embedding), type(y), "title:", title, "label name:", label_name)
+    n_frames = min(400, len(embedding))
+    frames = []
+    # Use y for all frames (assume y is static)
+    point_indices = np.arange(len(y))
+    # Initial frame
+    df0 = pd.DataFrame({
+        'x': embedding[0][:, 0],
+        'y': embedding[0][:, 1],
+        'color': y.astype(str),
+        'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+        'point_index': point_indices,
+        'label': y.astype(str)
+    })
+    # Use a consistent color palette for both px.scatter and go.Scatter
+    color_palette = px.colors.qualitative.Light24
+
+    # Compute global min/max for all frames for fixed axes
+    all_x = np.concatenate([emb[:, 0] for emb in embedding[:n_frames]])
+    all_y = np.concatenate([emb[:, 1] for emb in embedding[:n_frames]])
+    x_range = [float(all_x.min()), float(all_x.max())]
+    y_range = [float(all_y.min()), float(all_y.max())]
+
+    fig = px.scatter(
+        df0,
+        x='x',
+        y='y',
+        color='color',
+        custom_data=['point_index', 'label'],
+        title=title,
+        labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+        color_discrete_sequence=color_palette,
+        range_x=x_range,
+        range_y=y_range
+    )
+    # Build frames
+    for i in range(n_frames):
+        dfi = pd.DataFrame({
+            'x': embedding[i][:, 0],
+            'y': embedding[i][:, 1],
+            'color': y.astype(str),
+            'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+            'point_index': point_indices,
+            'label': y.astype(str)
+        })
+        scatter = go.Scatter(
+            x=dfi['x'],
+            y=dfi['y'],
+            mode='markers',
+            marker=dict(
+                color=dfi['color_num'],
+                colorscale=color_palette,
+                cmin=0,
+                cmax=len(color_palette) - 1
+            ),
+            customdata=np.stack([dfi['point_index'], dfi['label']], axis=-1),
+            showlegend=False,
+            hovertemplate="Class: %{customdata[1]}<br>Index: %{customdata[0]}<br>X: %{x}<br>Y: %{y}<extra></extra>"
+        )
+        frames.append(go.Frame(data=[scatter], name=str(i)))
+    fig.frames = frames
+
+    # Add animation slider
+    sliders = [{
+        "steps": [
+            {
+                "args": [
+                    [str(k)],
+                    {
+                        "frame": {"duration": 0, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 0}
+                    }
+                ],
+                "label": str(k),
+                "method": "animate"
+            } for k in range(n_frames)
+        ],
+        "transition": {"duration": 0},
+        "x": 0.1,
+        "y": 0,
+        "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
+        "len": 0.9
+    }]
+    fig.update_layout(
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [
+                {
+                    "args": [
+                        None,
+                        {
+                            "frame": {"duration": 50, "redraw": True},
+                            "fromcurrent": True,
+                            "transition": {"duration": 0}
+                        }
+                    ],
+                    "label": "Play",
+                    "method": "animate"
+                },
+                {
+                    "args": [
+                        [None],
+                        {
+                            "frame": {"duration": 0, "redraw": True},
+                            "mode": "immediate",
+                            "transition": {"duration": 0}
+                        }
+                    ],
+                    "label": "Pause",
+                    "method": "animate"
+                }
+            ],
+            "direction": "left",
+            "pad": {"r": 10, "t": 70},
+            "showactive": False,
+            "x": 0.1,
+            "y": 0,
+            "xanchor": "right",
+            "yanchor": "top"
+        }],
+        sliders=sliders,
+        margin=dict(l=5, r=5, t=50, b=5)
+    )
+    return fig
+
+
 def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
-    if embedding is None or len(embedding) == 0 or embedding.shape[1] < 2:
+    if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
         return px.scatter(title=f"{title} (no data)")
-    
+
+    if 'trimap' in title.lower():
+        if show_images or is_thumbnail or n_added > 0:
+            embedding = embedding[-1]
+            print("Using last frame of TRIMAP embedding for visualization")
+        else:
+            return create_animated_figure(embedding, y, title, label_name)
+
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
 
