@@ -340,10 +340,10 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 df,
                 x='x',
                 y='y',
-                color='color',
+                color='label',
                 custom_data=['point_index', 'label'],
                 title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
                 category_orders=category_orders
             )
             fig.update_traces(
@@ -378,10 +378,10 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 df,
                 x='x',
                 y='y',
-                color='color',
+                color='label',
                 custom_data=['point_index', 'label'],
                 title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
                 category_orders=category_orders
             )
     else:
@@ -389,10 +389,10 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             df,
             x='x',
             y='y',
-            color='color',
+            color='label',
             custom_data=['point_index', 'label'],
             title=title,
-            labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
+            labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
             category_orders=category_orders
         )
 
@@ -440,6 +440,7 @@ def register_callbacks(app):
         Output('trimap-timing', 'children'),
         Output('tsne-timing', 'children'),
         Output('umap-timing', 'children'),
+        Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
         Input('recalculate-switch', 'value'),
         Input('dots-images-switch', 'value'),
@@ -447,7 +448,7 @@ def register_callbacks(app):
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data'),
-        State('added-data-cache', 'data'),
+        State('added-data-cache', 'data')
     )
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
                       added_data_cache):
@@ -577,6 +578,26 @@ def register_callbacks(app):
                 'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
                 'umap': umap_emb.tolist() if umap_emb is not None else None
             }
+
+        ctx = callback_context
+        if not ctx.triggered:
+            calc_status = f"Loaded dataset {dataset_name}" # Initial state, no message
+        
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        # For dataset loading
+        if trigger_id == 'dataset-dropdown':
+            calc_status = f"Loaded dataset {dataset_name}"
+
+        # For recalculation
+        elif trigger_id == 'recalculate-switch' and recalculate_flag:
+            calc_status = f"Recalculated embeddings for {dataset_name}"
+        
+        # For thumbnail clicks
+        elif trigger_id in ['trimap-thumbnail-click', 'tsne-thumbnail-click', 'umap-thumbnail-click']:
+            method_name = trigger_id.replace('-thumbnail-click', '').upper()
+            calc_status = f"Calculated {method_name} embedding"
+        
         
         return (
             main_fig,
@@ -588,39 +609,9 @@ def register_callbacks(app):
             cached_embeddings,
             f"TRIMAP: {trimap_time:.2f}s",
             f"t-SNE: {tsne_time:.2f}s",
-            f"UMAP: {umap_time:.2f}s"
+            f"UMAP: {umap_time:.2f}s",
+            calc_status
         )
-
-    @app.callback(
-        Output('calculation-status', 'children'),
-        Input('dataset-dropdown', 'value'),
-        Input('trimap-thumbnail-click', 'n_clicks'),
-        Input('tsne-thumbnail-click', 'n_clicks'),
-        Input('umap-thumbnail-click', 'n_clicks'),
-        Input('recalculate-switch', 'value'),
-        State('embedding-cache', 'data')
-    )
-    def update_calculation_message(dataset_name, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, recalculate_flag, cached_embeddings):
-        ctx = callback_context
-        if not ctx.triggered:
-            return f"Loading dataset {dataset_name}..." # Initial state, no message
-
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-        # For dataset loading
-        if trigger_id == 'dataset-dropdown':
-            return f"Loading dataset {dataset_name}..."
-
-        # For recalculation
-        elif trigger_id == 'recalculate-switch' and recalculate_flag:
-            return f"Recalculating embeddings for {dataset_name}..."
-        
-        # For thumbnail clicks
-        elif trigger_id in ['trimap-thumbnail-click', 'tsne-thumbnail-click', 'umap-thumbnail-click']:
-            method_name = trigger_id.replace('-thumbnail-click', '').upper()
-            return f"Calculating {method_name} embedding..."
-
-        return ""
 
     @app.callback(
         Output('selected-image', 'src'),
@@ -1018,6 +1009,47 @@ def register_callbacks(app):
         else:
             # Show the metadata row for datasets with meaningful features
             return {'display': 'block'}
+    
+    @app.callback(
+        Output("full-grid-container", "style"),
+        [
+            Input("full-grid-btn", "n_clicks"),
+            Input("main-graph", "clickData")  
+        ],
+        State("full-grid-container", "style"),
+        prevent_initial_call=True
+    )
+    def toggle_full_grid(n_clicks, click_data, current_style):
+        triggered = callback_context.triggered_id
+
+        if triggered == "full-grid-btn":
+            # Toggle the grid open/close
+            if current_style and current_style.get("display") == "block":
+                return {"display": "none"}
+            return {"display": "block"}
+
+        elif triggered == "main-graph" and click_data is not None:
+            # Hide grid after clicking on image
+            return {"display": "none"}
+
+        return current_style
+
+    @app.callback(
+        Output("full-grid-container", "children"),
+        Input("full-grid-btn", "n_clicks"),
+        State("dataset-dropdown", "value"),
+        prevent_initial_call=True
+    )
+    def generate_full_grid(n_clicks, dataset_name):
+        X, y, data = get_dataset(dataset_name)
+        if dataset_name not in IMAGE_ONLY_DATASETS:
+            return html.Div("Full grid only available for image datasets.")
+        
+        return html.Div([
+            html.Img(src=create_datapoint_image(X[i]), style={'width': '40px', 'margin': '2px'})
+            for i in range(min(len(X), 300))  # Limit for performance
+        ], style={'display': 'grid', 'gridTemplateColumns': 'repeat(auto-fill, 40px)', 'gap': '4px'})
+
 
     # Existing callbacks (ensure they are still present after the edit)
 
