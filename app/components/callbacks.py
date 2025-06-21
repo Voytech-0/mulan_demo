@@ -439,7 +439,15 @@ def create_animated_figure(embedding, y, title, label_name):
                         }
                     ],
                     "label": "Pause",
-                    "method": "animate"
+                    "method": "animate",
+                    "args": [
+                        [],
+                        {
+                            "mode": "immediate",
+                            "frame": {"duration": 0, "redraw": False},
+                            "transition": {"duration": 0}
+                        }
+                    ]
                 }
             ],
             "direction": "left",
