@@ -1,4 +1,5 @@
 import json
+from functools import partial
 
 import jax.random as random
 from sklearn import datasets
@@ -14,6 +15,7 @@ import pandas as pd
 
 from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
 from .plot_maker import add_new_data_to_fig
+from .projection_wrapper import TrimapWrapper
 from .settings import get_image_style, get_no_image_message_style, get_generative_placeholder_style, CELL_STYLE, \
     CELL_STYLE_RIGHT, TABLE_STYLE, EMPTY_METADATA_STYLE
 
@@ -33,13 +35,15 @@ from math import ceil, floor
 import cv2
 
 
-from .features import dynamically_add, generate_sample, dataset_shape
+from .features import generate_sample, dataset_shape
 from .plot_maker import encode_img_as_str, invisible_interactable_layer
 # Import TRIMAP from local package
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'google_research_trimap'))
 from google_research_trimap.trimap import trimap
 
+
+trimap_cache_name = 'trimap_cache'
 # Try to import UMAP, if available
 _image_cache = {}
 umap_available = False
@@ -185,23 +189,12 @@ def get_dataset(name):
     return X, y, data
 
 
-def compute_trimap(X, distance):
-    key = random.PRNGKey(0)
+def compute_trimap(X, distance, parametric=False):
     start_time = time.time()
     with numba_global_lock:
-        print('Starting TRIMAP calculation...')
-
-        # Adjust n_inliers based on dataset size
-        n_points = X.shape[0]
-        n_inliers = min(5, n_points - 2)  # Use at most 5 inliers, but ensure it's less than n_points-1
-
-        # Time the nearest neighbor search
-        nn_start = time.time()
-        print('Finding nearest neighbors...')
-        emb = trimap.transform(key, X, n_inliers=n_inliers, output_metric=distance, auto_diff=False, export_iters=True)
-        nn_time = time.time() - nn_start
-        print(f'Nearest neighbor search took: {nn_time:.2f} seconds')
-
+        wrapper = TrimapWrapper()
+        emb = wrapper.fit_transform(X, distance_metric=distance)
+        wrapper.store(trimap_cache_name)
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
     if distance == 'haversine':
@@ -599,11 +592,12 @@ def register_callbacks(app):
         Input('tsne-thumbnail-click', 'n_clicks'),
         Input('umap-thumbnail-click', 'n_clicks'),
         State('embedding-cache', 'data'),
-        State('added-data-cache', 'data'),
-        Input('dist-dropdown', 'value')
+        Input('added-data-cache', 'data'),
+        Input('dist-dropdown', 'value'),
+        Input('parametric-iterative-switch', 'value'),
     )
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
-                      added_data_cache, distance):
+                      added_data_cache, distance, parametric_iterative_switch):
         if not dataset_name:
             empty_fig = px.scatter(title="No dataset selected")
             return (
@@ -685,8 +679,9 @@ def register_callbacks(app):
 
             return None  # Return None if no embedding is available and we're not computing
 
+        compute_trimap_curried = partial(compute_trimap, parametric=parametric_iterative_switch)
         # Get embeddings for all methods
-        trimap_emb = get_embedding('trimap', compute_trimap, X, distance)
+        trimap_emb = get_embedding('trimap', compute_trimap_curried, X, distance)
         tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
         umap_emb = get_embedding('umap', compute_umap, X, distance)
 
@@ -694,17 +689,26 @@ def register_callbacks(app):
         class_names = getattr(data, 'target_names', None)
 
         n_added = 0
+        X_add, y_add, emb_add = None, None, None
         for source in ['user_generated', 'augmented']:
             if source in added_data_cache: # cache not empty
                 if source == 'user_generated':
                     X_add = np.array(added_data_cache['user_generated'])
                     y_add = np.zeros(X_add.shape[0]) - 1
-                else:
+                elif X_add is None:
                     X_add, y_add = added_data_cache['augmented']
-                n_added += len(X_add)
-                X = np.concatenate((X, X_add), axis=0)
-                y = np.concatenate((y, y_add), axis=0)
-                trimap_emb = dynamically_add(trimap_emb, X)
+                else:
+                    X_add2, y_add2 = added_data_cache['augmented']
+                    X_add = np.concatenate((X_add, X_add2))
+                    y_add = np.concatenate((y_add, y_add2))
+
+        if X_add is not None:
+            n_added = len(X_add)
+            wrapper = TrimapWrapper.load(trimap_cache_name)
+            emb_add = wrapper.transform(X_add)
+            trimap_emb = np.concatenate((trimap_emb, emb_add))
+            X = np.concatenate((X, X_add), axis=0)
+            y = np.concatenate((y, y_add), axis=0)
 
         is_animated = None
         # return create_animated_figure(embedding, y, title, label_name)
@@ -823,9 +827,8 @@ def register_callbacks(app):
         if enabled:
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
-            X, _, _ = get_dataset(dataset_name)
-            embedding, _ = load_embedding(dataset_name, 'trimap')
-            sample = generate_sample(x_coord, y_coord, X, embedding)
+            wrapper = TrimapWrapper.load(trimap_cache_name)
+            sample = wrapper.inverse_transform(np.array([x_coord, y_coord]))
             img_str = encode_img_as_str(sample, dataset_name)
             # In generative mode, show placeholder and hide other image elements
             return (
