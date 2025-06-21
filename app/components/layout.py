@@ -4,7 +4,7 @@ from dash_canvas import DashCanvas
 from .settings import (
     IMAGE_DISPLAY_CONTAINER_HEIGHT, SELECTED_IMAGE_STYLE, NO_IMAGE_MESSAGE_STYLE,
     GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
-    METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR
+    METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR, NO_METADATA_MESSAGE_STYLE
 )
 import pandas as pd
 
@@ -35,31 +35,34 @@ def create_layout(app):
                 html.Div(
                     id='image-display',
                     children=[
-                        html.Div(
-                            id='click-message',
-                            children="Click on a point in the graph to view its details",
-                            style={'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'}
-                        ),
                         dbc.Row([
                             dbc.Col([
-                                dbc.Row([
-                                    html.H5("Image", className="text-center mb-2"),
+                                html.H5("Image", className="text-center mb-2"),
+                                html.Div([
                                     html.Img(id='selected-image', src='', style=SELECTED_IMAGE_STYLE),
-                                    html.Div(id='no-image-message', children="No image to display in this dataset", style=NO_IMAGE_MESSAGE_STYLE),
+                                    html.Div(id='no-image-message', style=NO_IMAGE_MESSAGE_STYLE),
                                     html.Div(id='generative-mode-placeholder', children="Generative mode content will appear here", style=GENERATIVE_PLACEHOLDER_STYLE)
-                                ]),
-                                dbc.Row([
-                                    html.H5("Coordinates", className="text-center mb-2"),
-                                    html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
-                                ]),
-                                dbc.Row([
-                                    html.H5("Point Metadata", className="text-center mb-2"),
-                                    html.Div(id='point-metadata', style=METADATA_DISPLAY_STYLE),
-                                ], id='point-metadata-row')
-                            ], width=12),
-
-
-                        ])
+                                ], style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center', 'height': 'auto'})
+                            ], width=12)
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H5("Coordinates", className="text-center mb-2"),
+                                html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
+                            ], width=12, style={'marginTop': '2.5rem'}, id='coordinates-col'),
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H5("Point Metadata", className="text-center mb-2"),
+                                html.Div([
+                                    html.Div(id='point-metadata'),
+                                    html.Div(
+                                        id='no-metadata-message',
+                                        style=NO_METADATA_MESSAGE_STYLE
+                                    )   
+                                ], style=METADATA_DISPLAY_STYLE) 
+                            ], width=12, style={'marginTop': '2rem'})    
+                        ], id='point-metadata-row', justify='center')
                     ],
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
                            'visibility': 'visible'}
@@ -93,31 +96,40 @@ def create_layout(app):
 
                 # New elements for the left column as per user's image
                 dbc.Row([
-                    dbc.Col(html.Label("Pick a Dataset :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    dbc.Col(html.Label("Dataset Type:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    
                     dbc.Col(dcc.Dropdown(
-                        id='dataset-dropdown',
+                        id='dataset-family-dropdown',
                         options=[
-                            {"label": name, "value": name} for name in [
-                                "Digits", "Iris", "Wine", "Breast Cancer",
-                                "MNIST", "Fashion MNIST", "Elephant"
-                            ]
-                        ] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}],
-                        value='Digits',
+                            {"label": "Classic Datasets", "value": "classic"},
+                            {"label": "PACS", "value": "pacs"},
+                            {"label": "Upload Custom Dataset", "value": "custom_upload"}
+                        ],
+                        value="classic",
+                        clearable=False,
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
                             'border': '1px solid #dee2e6'
                         },
-                        className="dash-bootstrap-dropdown custom-dropdown",
-                        optionHeight=35,
-                        persistence=True,
-                        persistence_type='session'
-                    ), width=5),
+                    ), width=3),
+
+                    dbc.Col(dcc.Dropdown(
+                        id='dataset-dropdown',
+                        value='Digits',  # Default value will be updated by callback
+                        clearable=False,
+                        style={
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': '1px solid #dee2e6'
+                        },
+                    ), width=3),
+
                     dbc.Col(dbc.Button(
                         [html.I(className="fas fa-upload me-2"), "New datapoint"],
                         id="upload-new-datapoint-btn",
                         className="ms-2 control-button"
-                    ), width=4)
+                    ), width=3),
                 ], className="mb-3 align-items-center"),
 
                 dbc.Row([
@@ -220,7 +232,7 @@ def create_layout(app):
                                 # Static main graph
                                 dcc.Graph(
                                     id='main-graph-static',
-                                    style={'height': '60vh', 'margin-bottom': '0.5rem', 'display': 'block'},
+                                    style={'height': '65vh', 'width': '100%', 'margin-bottom': '0.5rem', 'display': 'block'},
                                     config={'displayModeBar': True}
                                 ),
                                 # Animated main graph
