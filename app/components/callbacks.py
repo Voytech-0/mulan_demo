@@ -544,6 +544,25 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 ),
                 selector=dict(type='scatter')
             )
+            if show_images and X is not None:
+                hover_texts = []
+                for i in df['point_index']:
+                    img_str = create_datapoint_image(X[i], size=(30, 30))
+                    hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
+                    hover_texts.append(hover_html)
+
+            fig.update_traces(
+                marker=dict(
+                    size=15,
+                    sizeref=1,
+                    sizemin=5,
+                    sizemode='diameter'
+                ),
+                hoverinfo="text",
+                hovertemplate=None,
+                text=hover_texts,
+                selector=dict(type='scatter')
+            )
             for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
                 x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
                 x_range = df['x'].max() - df['x'].min()
@@ -610,12 +629,12 @@ def create_metadata_display(dataset_name, data):
     # This function is now mostly for the dataset-level metadata, not point-level
     return html.Div([
                 html.Div([
-                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '2rem'}),
+                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
                     # information abou the dataset
                     # html.P(f"{}   
-                    html.P(f"Number of samples: {data.data.shape[0]}"),
-                    html.P(f"Number of features: {data.data.shape[1]}"),
-                    html.P(f"Number of classes: {len(np.unique(data.target))}")
+                    html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
+                    html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
+                    html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
                 ], style={'text-align': 'center'})
             ], style={
                 'display': 'flex',
@@ -869,12 +888,12 @@ def register_callbacks(app):
             return (
                 '',  # selected-image src
                 get_image_style('none'),  # selected-image style
-                get_no_image_message_style('block'), # no-image-message style
+                get_no_image_message_style('none'), # no-image-message style
                 html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),  
-                html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '6rem'}),  # coordinates-display children
+                html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),  # coordinates-display children
                 "",  # point-metadata children
                 get_no_metadata_message_style('block'),
-                html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999', 'marginTop': '6rem'}),
+                html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),
                 get_generative_placeholder_style('none'),
                 {'display':'block'},  # generative-mode-placeholder style
                 {'marginTop': '2rem'}
@@ -890,7 +909,7 @@ def register_callbacks(app):
             # In generative mode, show placeholder and hide other image elements
             return (
                 f'data:image/png;base64,{img_str}',
-                get_image_style('none'), # selected-image style
+                get_image_style('block'), # selected-image style
                 get_no_image_message_style('block'), # no-image-message style
                 html.Div("No image to display for this dataset", style={'text-align': 'center', 'color': '#999'}),
                 "", 

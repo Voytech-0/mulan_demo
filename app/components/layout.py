@@ -48,7 +48,7 @@ def create_layout(app):
                             dbc.Col([
                                 html.H5("Coordinates", className="text-center mb-2"),
                                 html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
-                            ], width=12, style={'marginTop': '2.5rem'}, id='coordinates-col'),
+                            ], width=12, style={'padding': 0}, id='coordinates-col'),
                         ]),
                         dbc.Row([
                             dbc.Col([
@@ -56,12 +56,10 @@ def create_layout(app):
                                 html.Div([
                                     html.Div(id='point-metadata'),
                                     html.Div(
-                                        id='no-metadata-message',
-                                        style=NO_METADATA_MESSAGE_STYLE
-                                    )   
+                                        id='no-metadata-message', style=NO_METADATA_MESSAGE_STYLE)
                                 ], style=METADATA_DISPLAY_STYLE) 
-                            ], width=12, style={'marginTop': '2rem'})    
-                        ], id='point-metadata-row', justify='center')
+                            ], width=12, style={'padding': 0}, id='point-metadata-row')    
+                        ])
                     ],
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
                            'visibility': 'visible'}
@@ -100,9 +98,9 @@ def create_layout(app):
                     dbc.Col(dcc.Dropdown(
                         id='dataset-family-dropdown',
                         options=[
-                            {"label": "Classic Datasets", "value": "classic"},
+                            {"label": "Classic", "value": "classic"},
                             {"label": "PACS", "value": "pacs"},
-                            {"label": "Upload Custom Dataset", "value": "custom_upload"}
+                            {"label": "Custom", "value": "custom_upload"}
                         ],
                         value="classic",
                         clearable=False,
@@ -301,7 +299,7 @@ def create_layout(app):
                         html.Div(
                             id='metadata-display',
                             children="",
-                            style={'height': METADATA_DISPLAY_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': BACKGROUND_COLOR, 'color': 'white'}
+                            style={'height': '25vh', 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': BACKGROUND_COLOR, 'color': 'white'}
                         ),
                         width=7
                     ),
@@ -330,7 +328,7 @@ def create_layout(app):
                                 tooltip={"placement": "bottom", "always_visible": False},
                                 className='mb-3'
                             )
-                        ], style={'height': '100%', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'})
+                        ], style={'height': '25vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'})
                         , width=5
                     )
                 ])
