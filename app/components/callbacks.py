@@ -871,10 +871,10 @@ def register_callbacks(app):
                 get_image_style('none'),  # selected-image style
                 get_no_image_message_style('block'), # no-image-message style
                 html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),  
-                html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999'}),  # coordinates-display children
+                html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '6rem'}),  # coordinates-display children
                 "",  # point-metadata children
                 get_no_metadata_message_style('block'),
-                html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999'}),
+                html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999', 'marginTop': '6rem'}),
                 get_generative_placeholder_style('none'),
                 {'display':'block'},  # generative-mode-placeholder style
                 {'marginTop': '2rem'}
