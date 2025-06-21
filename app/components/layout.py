@@ -12,6 +12,7 @@ def create_layout(app):
     return html.Div([
         html.H1("Manifold Learning Visualizations", className="text-center mb-4"),
         dcc.Store(id='generative-mode-state', data={'enabled': False}),
+        dcc.Store(id='trimap-wrapper-file', data=''),
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
