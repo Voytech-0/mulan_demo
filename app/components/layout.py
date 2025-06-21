@@ -4,7 +4,7 @@ from dash_canvas import DashCanvas
 from .settings import (
     IMAGE_DISPLAY_CONTAINER_HEIGHT, SELECTED_IMAGE_STYLE, NO_IMAGE_MESSAGE_STYLE,
     GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
-    METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR
+    METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR, NO_METADATA_MESSAGE_STYLE
 )
 import pandas as pd
 
@@ -34,31 +34,34 @@ def create_layout(app):
                 html.Div(
                     id='image-display',
                     children=[
-                        html.Div(
-                            id='click-message',
-                            children="Click on a point in the graph to view its details",
-                            style={'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'}
-                        ),
                         dbc.Row([
                             dbc.Col([
-                                dbc.Row([
-                                    html.H5("Image", className="text-center mb-2"),
+                                html.H5("Image", className="text-center mb-2"),
+                                html.Div([
                                     html.Img(id='selected-image', src='', style=SELECTED_IMAGE_STYLE),
-                                    html.Div(id='no-image-message', children="No image to display in this dataset", style=NO_IMAGE_MESSAGE_STYLE),
+                                    html.Div(id='no-image-message', style=NO_IMAGE_MESSAGE_STYLE),
                                     html.Div(id='generative-mode-placeholder', children="Generative mode content will appear here", style=GENERATIVE_PLACEHOLDER_STYLE)
-                                ]),
-                                dbc.Row([
-                                    html.H5("Coordinates", className="text-center mb-2"),
-                                    html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
-                                ]),
-                                dbc.Row([
-                                    html.H5("Point Metadata", className="text-center mb-2"),
-                                    html.Div(id='point-metadata', style=METADATA_DISPLAY_STYLE),
-                                ], id='point-metadata-row')
-                            ], width=12),
-
-
-                        ])
+                                ], style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center', 'height': 'auto'})
+                            ], width=12)
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H5("Coordinates", className="text-center mb-2"),
+                                html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
+                            ], width=12, style={'marginTop': '2.5rem'}, id='coordinates-col'),
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H5("Point Metadata", className="text-center mb-2"),
+                                html.Div([
+                                    html.Div(id='point-metadata'),
+                                    html.Div(
+                                        id='no-metadata-message',
+                                        style=NO_METADATA_MESSAGE_STYLE
+                                    )   
+                                ], style=METADATA_DISPLAY_STYLE) 
+                            ], width=12, style={'marginTop': '2rem'})    
+                        ], id='point-metadata-row', justify='center')
                     ],
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
                            'visibility': 'visible'}
