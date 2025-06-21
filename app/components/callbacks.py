@@ -11,6 +11,7 @@ import numpy as np
 import threading
 import matplotlib
 import pandas as pd
+import glob
 
 from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
 from .plot_maker import add_new_data_to_fig
@@ -50,6 +51,34 @@ try:
     umap_available = True
 except ImportError:
     pass # umap_lib remains None
+
+def load_PACS(domain='photo'):
+    """Load PACS dataset."""
+    base_path = os.path.join(os.path.dirname(__file__), "pacs_data", domain)
+    classes = sorted(os.listdir(base_path))
+    images = []
+    labels = []
+
+    for idx, class_name in enumerate(classes):
+        class_dir = os.path.join(base_path, class_name)
+        for ext in ('*.jpg', '*.png'):
+            for img_path in glob.glob(os.path.join(class_dir, ext)):
+                img = Image.open(img_path).convert("L").resize((28,28))
+                images.append(img)
+                labels.append(idx)
+
+    X = np.stack(images)
+    X = X.reshape(X.shape[0], -1).astype(np.float32)
+    y = np.array(labels)
+
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = classes
+            self.feature_names = [f"pixel_{i}" for i in range(self.data.shape[1])]
+
+    return Dataset(X, y)
 
 def load_fashion_mnist():
     """Load Fashion MNIST dataset."""
@@ -158,6 +187,10 @@ DATASET_LOADERS = {
     "Fashion MNIST": load_fashion_mnist,
     "MNIST": load_mnist,
     "Elephant": load_elephant,
+    "PACS - Photo": lambda: load_PACS("photo"),
+    "PACS - Sketch": lambda: load_PACS("sketch"),
+    "PACS - Cartoon": lambda: load_PACS("cartoon"),
+    "PACS - Art Painting": lambda: load_PACS("art_painting"),
 }
 
 # Single global lock for computations
@@ -916,7 +949,7 @@ def register_callbacks(app):
         ], style=TABLE_STYLE)
 
         # For image datasets (Digits, MNIST, Fashion MNIST, Elephant), create and display the image
-        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant"]:
+        if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant", "PACS - Photo", "PACS - Cartoon", "PACS - Art Painting"]:
             img_str = encode_img_as_str(X[point_index], dataset_name)
 
             # For image-only datasets, show empty metadata
@@ -1186,6 +1219,38 @@ def register_callbacks(app):
             html.Img(src=create_datapoint_image(X[i]), style={'width': '40px', 'margin': '2px'})
             for i in range(min(len(X), 300))  # Limit for performance
         ], style={'display': 'grid', 'gridTemplateColumns': 'repeat(auto-fill, 40px)', 'gap': '4px'})
+    
+    @app.callback(
+        Output('dataset-dropdown', 'options'),
+        Output('dataset-dropdown', 'value'),
+        Input('dataset-family-dropdown', 'value'),
+    )
+    def update_dataset_options(family):
+        if family == "classic":
+            options = [
+                {"label": "Digits", "value": "Digits"},
+                {"label": "Iris", "value": "Iris"},
+                {"label": "Wine", "value": "Wine"},
+                {"label": "Breast Cancer", "value": "Breast Cancer"},
+                {"label": "MNIST", "value": "MNIST"},
+                {"label": "Fashion MNIST", "value": "Fashion MNIST"},
+                {"label": "Elephant", "value": "Elephant"},
+            ]
+            return options, "Digits"
+
+        elif family == "pacs":
+            options = [
+                {"label": "Photo", "value": "PACS - Photo"},
+                {"label": "Sketch", "value": "PACS - Sketch"},
+                {"label": "Cartoon", "value": "PACS - Cartoon"},
+                {"label": "Art Painting", "value": "PACS - Art Painting"},
+            ]
+            return options, "PACS - Photo"
+
+        elif family == "custom_upload":
+            return [{"label": "Upload Custom Dataset", "value": "custom_upload"}], "custom_upload"
+
+        return [], None
 
 
     # Existing callbacks (ensure they are still present after the edit)

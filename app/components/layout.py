@@ -92,31 +92,40 @@ def create_layout(app):
 
                 # New elements for the left column as per user's image
                 dbc.Row([
-                    dbc.Col(html.Label("Pick a Dataset :", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    dbc.Col(html.Label("Dataset Type:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    
                     dbc.Col(dcc.Dropdown(
-                        id='dataset-dropdown',
+                        id='dataset-family-dropdown',
                         options=[
-                            {"label": name, "value": name} for name in [
-                                "Digits", "Iris", "Wine", "Breast Cancer",
-                                "MNIST", "Fashion MNIST", "Elephant"
-                            ]
-                        ] + [{"label": "Upload Custom Dataset", "value": "custom_upload"}],
-                        value='Digits',
+                            {"label": "Classic Datasets", "value": "classic"},
+                            {"label": "PACS", "value": "pacs"},
+                            {"label": "Upload Custom Dataset", "value": "custom_upload"}
+                        ],
+                        value="classic",
+                        clearable=False,
                         style={
                             'backgroundColor': '#2c3e50',
                             'color': 'white',
                             'border': '1px solid #dee2e6'
                         },
-                        className="dash-bootstrap-dropdown custom-dropdown",
-                        optionHeight=35,
-                        persistence=True,
-                        persistence_type='session'
-                    ), width=5),
+                    ), width=3),
+
+                    dbc.Col(dcc.Dropdown(
+                        id='dataset-dropdown',
+                        value='Digits',  # Default value will be updated by callback
+                        clearable=False,
+                        style={
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': '1px solid #dee2e6'
+                        },
+                    ), width=3),
+
                     dbc.Col(dbc.Button(
                         [html.I(className="fas fa-upload me-2"), "New datapoint"],
                         id="upload-new-datapoint-btn",
                         className="ms-2 control-button"
-                    ), width=4)
+                    ), width=3),
                 ], className="mb-3 align-items-center"),
 
                 dbc.Row([
