@@ -9,13 +9,13 @@ All UI dimensions, heights, and styling parameters are defined here.
 
 # Container heights
 IMAGE_DISPLAY_CONTAINER_HEIGHT = "56vh"
-METADATA_DISPLAY_HEIGHT = "20vh"
+METADATA_DISPLAY_HEIGHT = "16vh"
 
 # Component heights
-IMAGE_HEIGHT = "30vh"
+IMAGE_HEIGHT = "25vh"
 IMAGE_MAX_HEIGHT = "30vh"
 IMAGE_MIN_HEIGHT = "4vh"
-COORDINATES_HEIGHT = "18vh"
+COORDINATES_HEIGHT = "16vh"
 METADATA_HEIGHT = "4vh"
 NO_IMAGE_HEIGHT = "4vh"
 GENERATIVE_PLACEHOLDER_HEIGHT = "30vh"
@@ -79,14 +79,18 @@ COORDINATES_DISPLAY_STYLE = {
     'height': COORDINATES_HEIGHT, 
     'overflow-y': 'auto', 
     'border': f'1px solid {BORDER_COLOR}', 
-    'padding': STANDARD_PADDING
+    'padding': STANDARD_PADDING, 
+    'width': '100%',
+    'box-sizing': 'border-box'
 }
 
 METADATA_DISPLAY_STYLE = {
     'height': METADATA_DISPLAY_HEIGHT, 
     'overflow-y': 'auto', 
     'border': f'1px solid {BORDER_COLOR}', 
-    'padding': STANDARD_PADDING
+    'padding': STANDARD_PADDING,
+    'width': '100%',
+    'box-sizing': 'border-box'
 }
 
 # Table styles
