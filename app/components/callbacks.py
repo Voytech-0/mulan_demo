@@ -463,13 +463,21 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
 def create_metadata_display(dataset_name, data):
     # This function is now mostly for the dataset-level metadata, not point-level
     return html.Div([
-        html.H4(f"Dataset: {dataset_name}"),
-        # information abou the dataset
-        # html.P(f"{}   
-        html.P(f"Number of samples: {data.data.shape[0]}"),
-        html.P(f"Number of features: {data.data.shape[1]}"),
-        html.P(f"Number of classes: {len(np.unique(data.target))}")
-    ])
+                html.Div([
+                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '2rem'}),
+                    # information abou the dataset
+                    # html.P(f"{}   
+                    html.P(f"Number of samples: {data.data.shape[0]}"),
+                    html.P(f"Number of features: {data.data.shape[1]}"),
+                    html.P(f"Number of classes: {len(np.unique(data.target))}")
+                ], style={'text-align': 'center'})
+            ], style={
+                'display': 'flex',
+                'flexDirection': 'column',
+                'justifyContent': 'center',
+                'alignItems': 'center',
+                'textAlign': 'center'
+            })
 
 def register_callbacks(app):
     @app.callback(
@@ -661,11 +669,14 @@ def register_callbacks(app):
         Output('selected-image', 'src'),
         Output('selected-image', 'style'),
         Output('no-image-message', 'style'),
+        Output('no-image-message', 'children'),
         Output('coordinates-display', 'children'),
         Output('point-metadata', 'children'),
         Output('no-metadata-message', 'style'),
-        Output('click-message', 'style'),
+        Output('no-metadata-message', 'children'),
         Output('generative-mode-placeholder', 'style'),
+        Output('point-metadata-row', 'style'),
+        Output('coordinates-col', 'style'),
         Input('main-graph', 'clickData'),
         Input('generative-mode-state', 'data'),
         Input('dataset-dropdown', 'value'),
@@ -678,16 +689,21 @@ def register_callbacks(app):
 
         if not clickData:
             # Return default states when nothing is clicked
+            is_image_dataset = dataset_name in IMAGE_ONLY_DATASETS
+            image_message = "Click on a point in the graph to display image" if is_image_dataset else "No image to display for this dataset"
+            metadata_message = "No metadata to show in this dataset" if is_image_dataset else "Click on a point in the graph to show metadata"
             return (
                 '',  # selected-image src
                 get_image_style('none'),  # selected-image style
-                get_no_image_message_style('block'),  # no-image-message style
-                "",  # coordinates-display children
+                get_no_image_message_style('block'), # no-image-message style
+                html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),  
+                html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999'}),  # coordinates-display children
                 "",  # point-metadata children
                 get_no_metadata_message_style('block'),
-                {'display': 'block', 'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem',
-                 'color': '#666'},  # click-message style
-                get_generative_placeholder_style('none')  # generative-mode-placeholder style
+                html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999'}),
+                get_generative_placeholder_style('none'),
+                {'display':'block'},  # generative-mode-placeholder style
+                {'marginTop': '2rem'}
             )
 
         if enabled:
@@ -701,12 +717,15 @@ def register_callbacks(app):
             return (
                 f'data:image/png;base64,{img_str}',
                 get_image_style('none'), # selected-image style
-                get_no_image_message_style('none'), # no-image-message style
-                "", # coordinates-display children
-                "", # point-metadata children
+                get_no_image_message_style('block'), # no-image-message style
+                html.Div("No image to display for this dataset", style={'text-align': 'center', 'color': '#999'}),
+                "", 
+                "",
                 get_no_metadata_message_style('none'),
-                {'display': 'none'}, # click-message style
-                get_generative_placeholder_style('block') # generative-mode-placeholder style
+                "",
+                get_generative_placeholder_style('block'), # generative-mode-placeholder style
+                {'display': 'none'},
+                {'marginTop': '0.5rem'}
             )
         
         # Defensive: check for 'customdata' in clickData['points'][0]
@@ -801,12 +820,15 @@ def register_callbacks(app):
             return (
                 f'data:image/png;base64,{img_str}',
                 get_image_style('block'),
-                get_no_image_message_style('none'),
+                get_no_image_message_style('block'),
+                "",
                 coordinates_table,
                 metadata_content,
                 no_metadata_style,
-                {'display': 'none'}, # Hide click message
-                get_generative_placeholder_style('none') # Hide generative mode placeholder
+                "", # Hide click message
+                get_generative_placeholder_style('none'), # Hide generative mode placeholder
+                {'display': 'none'},
+                {'marginTop': '2rem'}
             )
         
         # For other datasets, show no image message and metadata
@@ -822,11 +844,14 @@ def register_callbacks(app):
             '',
             get_image_style('none'),
             get_no_image_message_style('block'),
+            html.Div("No image to display for this dataset", style={'text-align': 'center', 'color': '#999'}),
             coordinates_table,
             metadata_content,
             no_metadata_style,
-            {'display': 'none'}, # Hide click message
-            get_generative_placeholder_style('none') # Hide generative mode placeholder
+            "", # Hide click message
+            get_generative_placeholder_style('none'), # Hide generative mode placeholder
+            {'display': 'block'},
+            {'marginTop': '2rem'}
         )
 
     # Callbacks for the new UI elements in the left panel
@@ -1047,20 +1072,6 @@ def register_callbacks(app):
         X = np.clip(X, 0, 1).astype(float)
         data_cache['augmented'] = (X, y)
         return data_cache
-
-    # Callback to show/hide metadata row based on dataset type
-    @app.callback(
-        Output('point-metadata-row', 'style'),
-        Input('dataset-dropdown', 'value'),
-        prevent_initial_call=False
-    )
-    def toggle_metadata_row(dataset_name):
-        if dataset_name in IMAGE_ONLY_DATASETS:
-            # Hide the metadata row for image-only datasets
-            return {'display': 'none'}
-        else:
-            # Show the metadata row for datasets with meaningful features
-            return {'display': 'block'}
     
     # Callback to show/automatically hide full grid
     @app.callback(

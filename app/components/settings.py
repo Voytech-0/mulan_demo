@@ -4,7 +4,7 @@ All UI dimensions, heights, and styling parameters are defined here.
 """
 
 # Image display settings
-IMAGE_HEIGHT = "30vh"
+IMAGE_HEIGHT = "25vh"
 IMAGE_MAX_HEIGHT = "30vh"
 IMAGE_MIN_HEIGHT = "4vh"
 IMAGE_PADDING = "0.5rem"

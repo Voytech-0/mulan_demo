@@ -35,17 +35,12 @@ def create_layout(app):
                 html.Div(
                     id='image-display',
                     children=[
-                        html.Div(
-                            id='click-message',
-                            children="Click on a point in the graph to view its details",
-                            style={'text-align': 'center', 'padding': '0.5rem', 'margin-bottom': '0.5rem', 'color': '#666'}
-                        ),
                         dbc.Row([
                             dbc.Col([
                                 html.H5("Image", className="text-center mb-2"),
                                 html.Div([
                                     html.Img(id='selected-image', src='', style=SELECTED_IMAGE_STYLE),
-                                    html.Div(id='no-image-message', children="No image to display in this dataset", style=NO_IMAGE_MESSAGE_STYLE),
+                                    html.Div(id='no-image-message', style=NO_IMAGE_MESSAGE_STYLE),
                                     html.Div(id='generative-mode-placeholder', children="Generative mode content will appear here", style=GENERATIVE_PLACEHOLDER_STYLE)
                                 ], style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center', 'height': 'auto'})
                             ], width=12)
@@ -54,7 +49,7 @@ def create_layout(app):
                             dbc.Col([
                                 html.H5("Coordinates", className="text-center mb-2"),
                                 html.Div(id='coordinates-display', style=COORDINATES_DISPLAY_STYLE)
-                            ], width=12),
+                            ], width=12, style={'marginTop': '2.5rem'}, id='coordinates-col'),
                         ]),
                         dbc.Row([
                             dbc.Col([
@@ -63,11 +58,10 @@ def create_layout(app):
                                     html.Div(id='point-metadata'),
                                     html.Div(
                                         id='no-metadata-message',
-                                        children="Click on a point to display metadata",
                                         style=NO_METADATA_MESSAGE_STYLE
                                     )   
                                 ], style=METADATA_DISPLAY_STYLE) 
-                            ], width=12, style={'marginTop': '1rem'})    
+                            ], width=12, style={'marginTop': '2rem'})    
                         ], id='point-metadata-row', justify='center')
                     ],
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
@@ -102,7 +96,7 @@ def create_layout(app):
 
                 # New elements for the left column as per user's image
                 dbc.Row([
-                    dbc.Col(html.Label("Pick Dataset Type:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
+                    dbc.Col(html.Label("Dataset Type:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
                     
                     dbc.Col(dcc.Dropdown(
                         id='dataset-family-dropdown',
@@ -301,7 +295,7 @@ def create_layout(app):
                                     html.Div(id='tsne-timing', className="timing-display"),
                                     dcc.Graph(
                                         id='tsne-thumbnail',
-                                        style={'height': '13vh'},
+                                        style={'height': '225px', 'width': '100%'},
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
                                 ]
@@ -314,7 +308,7 @@ def create_layout(app):
                                     html.Div(id='umap-timing', className="timing-display"),
                                     dcc.Graph(
                                         id='umap-thumbnail',
-                                        style={'height': '13vh'},
+                                        style={'height': '225px', 'width': '100%'},
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
                                 ]
@@ -327,7 +321,7 @@ def create_layout(app):
                                     html.Div(id='trimap-timing', className="timing-display"),
                                     dcc.Graph(
                                         id='trimap-thumbnail',
-                                        style={'height': '13vh'},
+                                        style={'height': '225px', 'width': '100%'},
                                         config={'displayModeBar': False, 'staticPlot': True}
                                     )
                                 ]
