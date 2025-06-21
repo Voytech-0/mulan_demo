@@ -231,7 +231,7 @@ def create_layout(app):
                                 # Static main graph
                                 dcc.Graph(
                                     id='main-graph-static',
-                                    style={'height': '60vh', 'margin-bottom': '0.5rem', 'display': 'block'},
+                                    style={'height': '65vh', 'width': '100%', 'margin-bottom': '0.5rem', 'display': 'block'},
                                     config={'displayModeBar': True}
                                 ),
                                 # Animated main graph
