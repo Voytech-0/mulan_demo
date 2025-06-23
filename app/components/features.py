@@ -13,7 +13,7 @@ def dynamically_add(embedding, X, method='tsne'):
 
     X_old, X_new = X[:len(embedding)], X[len(embedding):]
     key = random.PRNGKey(0)
-    added_embedding =  trimap.embed_new_points(key, X_new, X_old, embedding)
+    added_embedding = trimap.embed_new_points(key, X_new, X_old, embedding)
     return jnp.concatenate((embedding, added_embedding), axis=0)
 
 def generate_sample(x_coord, y_coord, X, embedding):
