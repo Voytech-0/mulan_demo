@@ -625,6 +625,7 @@ def create_metadata_display(dataset_name, data):
                     html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
                     # information abou the dataset
                     # html.P(f"{}
+                    # html.P(f"{}
                     html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
@@ -664,6 +665,7 @@ def register_callbacks(app):
         Input('dist-dropdown', 'value'),
         Input('parametric-iterative-switch', 'value'),
     )
+
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
                       added_data_cache, distance, parametric_iterative_switch):
         if not dataset_name:
@@ -874,15 +876,92 @@ def register_callbacks(app):
         Output('generative-mode-placeholder', 'style'),
         Output('point-metadata-row', 'style'),
         Output('coordinates-col', 'style'),
+        Output('full-grid-container', 'style'),
+        Output('image-display', 'style'),
+        Output('image-draw', 'style'),
+        Output('full-grid-visible', 'data'),
         Input('main-graph-static', 'clickData'),
         Input('generative-mode-state', 'data'),
         Input('dataset-dropdown', 'value'),
+        Input('full-grid-btn', 'n_clicks'),
+        Input('upload-new-datapoint-btn', 'n_clicks'),
         State('dataset-dropdown', 'value'),
         State('main-graph-static', 'figure'),
-        State('embedding-cache', 'data')
+        State('embedding-cache', 'data'),
+        State('full-grid-container', 'style'),
+        State('image-display', 'style'),
+        State('image-draw', 'style'),
+        State('full-grid-visible', 'data'),
+        prevent_initial_call=True
     )
-    def display_clicked_point(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache):
+    def display_or_toggle(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache, full_grid_clicks, current_grid_style, upload_new_n_clicks, image_display_style, image_draw_style, full_grid_visible):
         enabled = generative_state.get('enabled', False) if generative_state else False
+        triggered = callback_context.triggered_id
+        is_image_dataset = dataset_name in IMAGE_ONLY_DATASETS
+        image_message = "Click on a point in the graph to display image" if is_image_dataset else "No image to display for this dataset"
+        metadata_message = "No metadata to show in this dataset" if is_image_dataset else "Click on a point in the graph to show metadata"
+
+        # Handle full grid toggle
+        if triggered == "full-grid-btn":
+            is_opening = not full_grid_visible
+
+            # When opening grid: hide all metadata/image blocks
+            if is_opening:
+                hidden = {'display': 'none'}
+                return (
+                    "",  # selected-image src
+                    hidden,  # selected-image style
+                    hidden,  # no-image-message style
+                    "",      # no-image-message text
+                    "",      # coordinates
+                    "",      # metadata
+                    hidden,  # no-metadata style
+                    "",      # no-metadata message
+                    hidden,  # placeholder
+                    hidden,  # row
+                    hidden,  # col
+                    {"display": "block"},
+                    hidden,  # unchanged
+                    image_draw_style,
+                    True 
+                )
+            
+            else:
+                # When closing the full grid, reset to default (no click) state
+                return (
+                    '',  # selected-image src
+                    get_image_style('none'),  # selected-image style
+                    get_no_image_message_style('block'), # no-image-message style
+                    html.Div(image_message, style={'text-align': 'center', 'color': '#999'}),
+                    html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),
+                    "",  # point-metadata children
+                    get_no_metadata_message_style('block'),
+                    html.Div(metadata_message, style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),
+                    get_generative_placeholder_style('none'),
+                    {'display': 'block'},
+                    {'marginTop': '2rem'},
+                    {'display': 'none'},  # hide full grid
+                    {'display': 'block'},
+                    image_draw_style,
+                    False
+                )
+        elif triggered == 'upload-new-datapoint-btn':
+            # Toggle image-display and image-draw visibility
+            display_visible = image_display_style.get("display") != "none"
+            new_image_display_style = {'display': 'none'} if display_visible else {'display': 'block'}
+            new_image_draw_style = {'display': 'block'} if display_visible else {'display': 'none'}
+
+            return (
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+                dash.no_update, dash.no_update, dash.no_update, dash.no_update,
+                dash.no_update, dash.no_update, dash.no_update,
+                dash.no_update,  # full-grid unchanged
+                new_image_display_style,
+                new_image_draw_style,
+                False
+            )
+
+
 
         if not clickData:
             is_image_dataset = dataset_name in IMAGE_ONLY_DATASETS
@@ -892,7 +971,7 @@ def register_callbacks(app):
             return (
                 '',  # selected-image src
                 get_image_style('none'),  # selected-image style
-                get_no_image_message_style('none'), # no-image-message style
+                get_no_image_message_style('block'), # no-image-message style
                 html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),  
                 html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),  # coordinates-display children
                 "",  # point-metadata children
@@ -900,7 +979,11 @@ def register_callbacks(app):
                 html.Div(metadata_message,  style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),
                 get_generative_placeholder_style('none'),
                 {'display':'block'},  # generative-mode-placeholder style
-                {'marginTop': '2rem'}
+                {'marginTop': '2rem'},
+                {'display': 'none'},
+                {'display': 'block'},  # unchanged
+                image_draw_style,
+                False
             )
 
         if enabled:
@@ -921,7 +1004,11 @@ def register_callbacks(app):
                 "",
                 get_generative_placeholder_style('block'), # generative-mode-placeholder style
                 {'display': 'none'},
-                {'marginTop': '0.5rem'}
+                {'marginTop': '0.5rem'},
+                {'display': 'none'},
+                image_display_style,  # unchanged
+                image_draw_style,
+                False
             )
 
         # Defensive: check for 'customdata' in clickData['points'][0]
@@ -1024,7 +1111,11 @@ def register_callbacks(app):
                 "", # Hide click message
                 get_generative_placeholder_style('none'), # Hide generative mode placeholder
                 {'display': 'none'},
-                {'marginTop': '2rem'}
+                {'marginTop': '2rem'},
+                {'display': 'none'},
+                image_display_style,  # unchanged
+                image_draw_style,
+                False
             )
 
         # For other datasets, show no image message and metadata
@@ -1047,7 +1138,11 @@ def register_callbacks(app):
             "", # Hide click message
             get_generative_placeholder_style('none'), # Hide generative mode placeholder
             {'display': 'block'},
-            {'marginTop': '2rem'}
+            {'marginTop': '2rem'},
+            {'display': 'none'},
+            image_display_style,  # unchanged
+            image_draw_style,
+            False
         )
 
     # Callbacks for the new UI elements in the left panel
@@ -1159,22 +1254,22 @@ def register_callbacks(app):
         return ""
 
     # Callback for Upload New Datapoint button
-    @app.callback(
-        Output('image-display', 'style'),
-        Output('image-draw', 'style'),
-        Input('upload-new-datapoint-btn', 'n_clicks'),
-        prevent_initial_call=True
-    )
-    def handle_upload_new_datapoint_button(n_clicks):
+    #@app.callback(
+    #    Output('image-display', 'style'),
+    #    Output('image-draw', 'style'),
+    #    Input('upload-new-datapoint-btn', 'n_clicks'),
+    #    prevent_initial_call=True
+    #)
+    #def handle_upload_new_datapoint_button(n_clicks):
         # Dynamic transforms
-        style1 = {'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem',
-                  'display': 'block', 'visibility': 'hidden'}
-        style2 = style1.copy()
-        style2['height'] = '56vh'
-        style2['visibility'] = 'visible'
-        if n_clicks % 2 == 0:
-            style1, style2 = style2, style1
-        return style1, style2
+    #    style1 = {'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem',
+    #              'display': 'block', 'visibility': 'hidden'}
+    #    style2 = style1.copy()
+    #    style2['height'] = '56vh'
+    #    style2['visibility'] = 'visible'
+    #    if n_clicks % 2 == 0:
+    #        style1, style2 = style2, style1
+    #    return style1, style2
 
     @app.callback(
         Output('canvas', 'json_data'),  # Clear the canvas
@@ -1229,29 +1324,37 @@ def register_callbacks(app):
         data_cache['augmented'] = (X, y)
         return data_cache
 
-    @app.callback(
-        Output("full-grid-container", "style"),
-        [
-            Input("full-grid-btn", "n_clicks"),
-            Input("main-graph-static", "clickData")
-        ],
-        State("full-grid-container", "style"),
-        prevent_initial_call=True
-    )
-    def toggle_full_grid(n_clicks, click_data, current_style):
-        triggered = callback_context.triggered_id
+   # @app.callback(
+   #     Output("full-grid-container", "style"),
+    #    Output('selected-image', 'style'),
+     #   Output('no-image-message', 'style'),
+      #  Output('coordinates-display', 'style'),
+      #  Output('point-metadata', 'style'),
+      #  Output('no-metadata-message', 'style'),
+      #  Output('generative-mode-placeholder', 'style'),
+      #  Output('point-metadata-row', 'style'),
+      #  Output('coordinates-col', 'style'),
+      #  [
+      #      Input("full-grid-btn", "n_clicks"),
+      #      Input("main-graph-static", "clickData")
+      #  ],
+      #  State("full-grid-container", "style"),
+      #  prevent_initial_call=True
+    #)
+    #def toggle_full_grid(n_clicks, click_data, current_style):
+    #    triggered = callback_context.triggered_id
 
-        if triggered == "full-grid-btn":
+       # if triggered == "full-grid-btn":
             # Toggle the grid open/close
-            if current_style and current_style.get("display") == "block":
-                return {"display": "none"}
-            return {"display": "block"}
+      #      if current_style and current_style.get("display") == "block":
+       #         return {"display": "none"}
+        #    return {"display": "block"}
 
-        elif triggered == "main-graph" and click_data is not None:
+        #elif triggered == "main-graph" and click_data is not None:
             # Hide grid after clicking on image
-            return {"display": "none"}
+         #   return {"display": "none"}
 
-        return current_style
+        #return current_style
 
     @app.callback(
         Output("full-grid-container", "children"),
