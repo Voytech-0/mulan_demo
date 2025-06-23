@@ -13,4 +13,11 @@ source activate mulan
 cd $HOME/mulan_demo
 export PYTHONPATH=$HOME
 
-python measure_time.py
+METHODS=("trimap_manual" "trimap_auto" "trimap_og" "umap" "tsne")
+DATASETS=("MNIST" "coil_20")
+
+for dataset in "${DATASETS[@]}"; do
+  for method in "${METHODS[@]}"; do
+    python measure_time.py --method "$method" --dataset "$dataset"
+  done
+done
