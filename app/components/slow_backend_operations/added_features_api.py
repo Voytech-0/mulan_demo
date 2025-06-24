@@ -1,8 +1,6 @@
-from components.slow_backend_operations.projection_wrapper import TrimapWrapper
-from google_research_trimap.trimap import trimap
-import jax.random as random
-import jax.numpy as jnp
 import numpy as np
+from components.slow_backend_operations.projection_wrapper import TrimapWrapper
+
 
 def dynamically_add(X, y, embedding, added_data):
     X_add, y_add, emb_add = None, None, None
