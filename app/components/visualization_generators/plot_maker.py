@@ -217,11 +217,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
     if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
         return px.scatter(title=f"{title} (no data)")
 
-    if 'trimap' in title.lower():
-        if show_images or is_thumbnail or n_added > 0:
-            embedding = embedding[-1]
-            print("Using last frame of TRIMAP embedding for visualization")
-
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
 

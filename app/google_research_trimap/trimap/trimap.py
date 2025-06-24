@@ -67,7 +67,7 @@ def get_distance_fn(distance_fn_name):
     elif distance_fn_name == 'chebyshev':
         return chebyshev_dist
     elif distance_fn_name in distances.named_distances:
-        print(f'Using UMAP-adapted distance function: {distance_fn_name}')
+        print(f'Using UMAP-adapzted distance function: {distance_fn_name}')
         return distances.named_distances[distance_fn_name]
     else:
         raise ValueError(f'Distance function {distance_fn_name} not supported.')
@@ -446,31 +446,22 @@ def trimap_metrics_grad(embedding, triplets, weights, metric):
 
     return loss, grad
 
-
-def trimap_metrics(embedding, triplets, weights, metric='euclidean'):
-    """Return trimap loss and number of violated triplets.
-
-    Args:
-      embedding: The embedding array.
-      triplets: Triplet indices.
-      weights: Triplet weights.
-      metric: Distance metric to use for the triplet loss. Can be a string
-    """
+@jax.jit
+def trimap_metrics(embedding, triplets, weights):
+    """Return trimap loss and number of violated triplets."""
     anc_points = embedding[triplets[:, 0]]
     sim_points = embedding[triplets[:, 1]]
     out_points = embedding[triplets[:, 2]]
-    fn = get_distance_fn(metric)
-    sim_distance = 1. + jax.vmap(fn)(anc_points, sim_points)
-    out_distance = 1. + jax.vmap(fn)(anc_points, out_points)
+    sim_distance = 1. + squared_euclidean_dist(anc_points, sim_points)
+    out_distance = 1. + squared_euclidean_dist(anc_points, out_points)
     num_violated = jnp.sum(sim_distance > out_distance)
     loss = jnp.mean(weights * 1. / (1. + out_distance / sim_distance))
     return loss, num_violated
 
-
 @jax.jit
-def trimap_loss(embedding, triplets, weights, output_metric='euclidean'):
+def trimap_loss(embedding, triplets, weights):
     """Return trimap loss."""
-    loss, _ = trimap_metrics(embedding, triplets, weights, metric=output_metric)
+    loss, _ = trimap_metrics(embedding, triplets, weights)
     return loss
 
 
@@ -482,16 +473,13 @@ def transform(key,
               n_random=3,
               weight_temp=0.5,
               distance='euclidean',
-              output_metric='euclidean',
               lr=0.1,
               n_iters=400,
               init_embedding='pca',
               apply_pca=True,
               triplets=None,
               weights=None,
-              verbose=False,
-              export_iters=False,
-              auto_diff=True):
+              verbose=False):
     """Transform inputs using TriMap.
 
     Args:
@@ -502,8 +490,7 @@ def transform(key,
       n_outliers: Number of outliers.
       n_random: Number of random triplets per point.
       weight_temp: Temperature of the log transformation on the weights.
-      distance: Distance type (input space).
-      output_metric: Output metric (embedding space).
+      distance: Distance type.
       lr: Learning rate.
       n_iters: Number of iterations.
       init_embedding: Initial embedding: pca, random, or pass pre-computed.
@@ -511,8 +498,6 @@ def transform(key,
       triplets: Use pre-sampled triplets.
       weights: Use pre-computed weights.
       verbose: Whether to print progress.
-      export_iters: Whether to export the embedding at each iteration.
-      auto_diff: Whether to use automatic differentiation for the loss.
 
     Returns:
       embedding
@@ -579,43 +564,24 @@ def transform(key,
     vel = jnp.zeros_like(embedding, dtype=jnp.float32)
     gain = jnp.ones_like(embedding, dtype=jnp.float32)
 
-    if export_iters:
-        shape = (n_iters, n_points, n_dims)
-        embedings_series = np.zeros(shape, dtype=np.float32)
-
-    def differentiable_loss(embedding, triplets, weights):
-        """Wrapper for the loss function to make it differentiable."""
-        loss, _ = trimap_metrics(embedding, triplets, weights, metric=output_metric)
-        return loss
-
-    if not auto_diff or callable(output_metric):
-        trimap_grad = (
-            lambda embedding, triplets, weights: trimap_metrics_grad(embedding, triplets, weights, output_metric)[1])
-    else:
-        trimap_grad = jax.jit(jax.grad(differentiable_loss))
+    trimap_grad = jax.grad(trimap_loss)
 
     for itr in range(n_iters):
         gamma = _FINAL_MOMENTUM if itr > _SWITCH_ITER else _INIT_MOMENTUM
         grad = trimap_grad(embedding + gamma * vel, triplets, weights)
-
         # update the embedding
-        embedding, gain, vel = update_embedding_dbd(embedding, grad, vel, gain, lr,
+        embedding, vel, gain = update_embedding_dbd(embedding, grad, vel, gain, lr,
                                                     itr)
-        if export_iters:
-            embedings_series[itr] = embedding
         if verbose:
             if (itr + 1) % _DISPLAY_ITER == 0:
-                loss, n_violated = trimap_metrics(embedding, triplets, weights, metric=output_metric)
+                loss, n_violated = trimap_metrics(embedding, triplets, weights)
                 logging.info(
                     'Iteration: %4d / %4d, Loss: %3.3f, Violated triplets: %0.4f',
                     itr + 1, n_iters, loss, n_violated / n_triplets * 100.0)
     if verbose:
         elapsed = str(datetime.timedelta(seconds=time.time() - t))
         logging.info('Elapsed time: %s', elapsed)
-    if export_iters:
-        return embedings_series
     return embedding
-
 
 def inverse_transform(key,
                       new_embeddings,

@@ -11,7 +11,6 @@ from sklearn import datasets
 
 import tensorflow as tf
 
-
 def load_PACS(domain='photo'):
     """Load PACS dataset."""
     data_path = '../../data/pacs_data'

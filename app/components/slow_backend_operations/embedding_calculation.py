@@ -1,17 +1,19 @@
 import threading
 import time
-
+import jax.random as random
 import umap
 from sklearn.manifold import TSNE
 
+from components.cache import cache
+from components.data_operations.dataset_api import get_dataset
 from components.embedding_storage import load_embedding, embedding_exists, save_embedding
-from components.slow_backend_operations.projection_wrapper import TrimapWrapper
-import numpy as np
 
+import google_research_trimap.trimap.trimap as trimap
+import google_research_trimap.trimap.parametric_trimap as ptrimap
+import numpy as np
 
 # Global lock for computations
 COMPUTATION_LOCK = threading.Lock()
-
 
 def post_process(result, distance):
     if distance == 'haversine':
@@ -25,24 +27,47 @@ def post_process(result, distance):
         # result = np.column_stack((x, y))
     return result
 
-
-def compute_trimap(X, distance, parametric=False):
+@cache.memoize()
+def compute_trimap_parametric(dataset_name):
+    X, _, _ = get_dataset(dataset_name)
     start_time = time.time()
+    key = random.PRNGKey(42)  # Deterministic
     with COMPUTATION_LOCK:
-        wrapper = TrimapWrapper()
-        emb = wrapper.fit_transform(X, distance_metric=distance)
-        wrapper.store('trimap_cache')
+        emb, model, params = ptrimap.fit_transform(key, X, n_dims=2)
+        result = np.array(emb) if hasattr(emb, "shape") else emb
+        total_time = time.time() - start_time
+
+    return result, total_time, model, params
+
+@cache.memoize()
+def compute_trimap_iterative(dataset_name, distance):
+    X, _, _ = get_dataset(dataset_name)
+    start_time = time.time()
+    key = random.PRNGKey(42)  # Deterministic
+    with COMPUTATION_LOCK:
+        emb = trimap.transform(key, X, verbose=True)
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
 
     result = post_process(result, distance)
     return result, total_time
 
+def compute_trimap(dataset_name, distance, parametric):
+    print('calculating trimap')
+    if parametric:
+        result, total_time, _, _ = compute_trimap_parametric(dataset_name)
+    else:
+        result, total_time = compute_trimap_iterative(dataset_name, distance)
+    print('trimap calculated')
+    return result, total_time
 
-def compute_tsne(X, distance):
+@cache.memoize()
+def compute_tsne(dataset_name, distance):
     if distance == 'haversine':
         print("t-SNE is not supported for haversine distance. Returning None.")
         return None, 0
+
+    X, _, _ = get_dataset(dataset_name)
     start_time = time.time()
     with COMPUTATION_LOCK:
         print('calculating tsne')
@@ -51,8 +76,9 @@ def compute_tsne(X, distance):
         print('tsne calculated')
     return result, time.time() - start_time
 
-
-def compute_umap(X, distance):
+@cache.memoize()
+def compute_umap(dataset_name, distance):
+    X, _, _ = get_dataset(dataset_name)
     start_time = time.time()
     with COMPUTATION_LOCK:
         print('calculating umap')
