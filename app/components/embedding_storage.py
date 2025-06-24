@@ -7,7 +7,6 @@ import numpy as np
 EMBEDDING_DIR = Path(__file__).parent.parent / 'saved_embeddings'
 EMBEDDING_DIR.mkdir(exist_ok=True)
 
-
 def get_embedding_path(dataset_name: str, method: str, output_metric: str) -> Path:
     """Get the path for a specific embedding file."""
     return EMBEDDING_DIR / f"{dataset_name}_{method}_{output_metric}.npy"

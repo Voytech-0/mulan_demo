@@ -29,7 +29,6 @@ trimap_cache_name = 'trimap_cache'
 # Try to import UMAP, if available
 
 
-
 def register_callbacks(app):
     @app.callback(
         Output('main-graph-static', 'figure'),
@@ -95,20 +94,20 @@ def register_callbacks(app):
             else:
                 method = 'trimap'  # Default method
 
-
-        compute_trimap_curried = partial(compute_trimap, parametric=parametric_iterative_switch)
         # Get embeddings for all methods
-        fwd_args = (X, distance, recalculate_flag, dataset_name)
+        fwd_args = (dataset_name, distance)
         if method == 'trimap' and is_animated:
             fwd_args = (*fwd_args, True)  # Add is_animated flag for TRIMAP
-        trimap_emb, trimap_time = get_embedding('trimap', compute_trimap_curried, *fwd_args)
-        tsne_emb, tsne_time = get_embedding('tsne', compute_tsne, *fwd_args)
-        umap_emb, umap_time = get_embedding('umap', compute_umap, *fwd_args)
+
+        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric_iterative_switch)
+        tsne_emb, tsne_time = compute_tsne(*fwd_args)
+        umap_emb, umap_time = compute_umap(*fwd_args)
 
         # Get class names for legend
         class_names = getattr(data, 'target_names', None)
 
-        X, y, trimap_emb, n_added = dynamically_add(X, y, trimap_emb, added_data_cache)
+        # X, y, trimap_emb, n_added = dynamically_add(X, y, trimap_emb, added_data_cache, parametric=False)
+        n_added = 0
 
         if method != 'trimap' or not is_animated:
             # Create static figures
@@ -124,6 +123,7 @@ def register_callbacks(app):
             )
             main_fig_animated = {}
         else:
+            is_animated = True
             main_fig_static = {}
             main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class')
 

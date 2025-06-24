@@ -1,12 +1,15 @@
 import os
 import threading
+from io import BytesIO
 
 import numpy as np
 import glob
 
+import requests
 from PIL import Image
 from sklearn import datasets
 
+import tensorflow as tf
 
 def load_PACS(domain='photo'):
     """Load PACS dataset."""
