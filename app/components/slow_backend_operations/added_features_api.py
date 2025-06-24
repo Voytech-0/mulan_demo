@@ -7,8 +7,8 @@ import google_research_trimap.trimap.trimap as trimap
 import google_research_trimap.trimap.parametric_trimap as ptrimap
 import jax.random as random
 
-def _ensure_batch(data):
-    if len(data.shape) == 2:
+def _ensure_batch(data, n_dims=2):
+    if len(data.shape) == n_dims:
         data = np.expand_dims(data, 0)
     return data
 
@@ -41,8 +41,7 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
         key = random.PRNGKey(0)
         embedding = compute_trimap_iterative(dataset, distance)
         X, _, _ = get_dataset(dataset)
-        print(_ensure_batch(X_add).shape, X_add.shape)
-        emb_add = trimap.embed_multiple_new_points(key, _ensure_batch(X_add), X, embedding)
+        emb_add = trimap.embed_new_points(key, X_add, X, embedding)
 
     return emb_add
 
@@ -56,6 +55,6 @@ def generate_sample(x_coord, y_coord, dataset, distance, parametric=False):
     else:
         embeddings, _ = compute_trimap_iterative(dataset, distance)
         X, _, _ = get_dataset(dataset)
-        inverse = trimap.inverse_transform(key, data, X, embeddings)
+        inverse = trimap.inverse_transform(key, data, X, embeddings[-1])
     return inverse
 
