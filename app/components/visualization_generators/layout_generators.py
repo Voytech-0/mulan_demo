@@ -1,27 +1,47 @@
-from dash import html
+from dash import html, dcc
+import dash_bootstrap_components as dbc
 import numpy as np
 from components.configs.settings import CELL_STYLE, CELL_STYLE_RIGHT, TABLE_STYLE
+from components.visualization_generators.plot_maker import create_data_distribution_plot
 
 
 def create_metadata_display(dataset_name, data):
-    # This function is now mostly for the dataset-level metadata, not point-level
+    data_distribution_fig = create_data_distribution_plot(data)
     return html.Div([
-        html.Div([
-            html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
-            # information abou the dataset
-            # html.P(f"{}
-            # html.P(f"{}
-            html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
-            html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
-            html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
-        ], style={'text-align': 'center'})
-    ], style={
+        dbc.Row([
+            dbc.Col(
+                html.Div([
+                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
+                    html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
+                    html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
+                    html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
+                ], style={'text-align': 'left'})),
+            dbc.Col(
+                dcc.Graph(id='class-distribution-plot', figure=data_distribution_fig,
+                          style={'height': '25vh', 'width': '60%', 'padding': '1rem', 'color': 'white',
+                                 'margin-bottom': '2rem'}))
+        ])], style={
         'display': 'flex',
         'flexDirection': 'column',
         'justifyContent': 'center',
         'alignItems': 'center',
         'textAlign': 'center'
     })
+#                       html.Div([
+#                             # Title
+#                             html.H5("Information about Dataset", style={'textAlign': 'center', 'color': 'white'}),
+#                             html.Div(
+#                                 children=[
+#                                 html.Div(
+#                                     id='metadata-display',
+#                                     children="",
+#                                     style={'height': '25vh', 'padding': '1rem', 'color': 'white', 'margin-top':'3rem'}
+#                                 ),
+#                                 # Middle: Class distribution plot
+#                                 dcc.Graph(id='class-distribution-plot', style={'height': '25vh', 'width': '60%', 'padding': '1rem', 'color': 'white', 'margin-bottom': '2rem'}),
+#                             ], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between',  'margin-top': '1rem', 'height':'25vh'})
+#                         ], style={'border': f'1px solid {BORDER_COLOR}', 'marginTop': '1rem','padding': '1rem', 'backgroundColor': '#23272b', 'height':'25vh'}),
+#                         width=7,
 
 def create_coordinate_table(x_coord, y_coord, point_index, class_label, digit_label):
     return html.Table([

@@ -1,4 +1,5 @@
 import numpy as np
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -219,7 +220,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
 
     if 'trimap' in title.lower():
         if show_images or is_thumbnail or n_added > 0:
-            embedding = embedding[-1]
+            # embedding = embedding[-1]
             print("Using last frame of TRIMAP embedding for visualization")
 
     # Create a list of customdata for each point, including the point index
@@ -372,4 +373,35 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         fig.update_layout(
             margin=dict(l=5, r=5, t=50, b=5)
         )
+    return fig
+def create_data_distribution_plot(data):
+    class_counts = pd.Series(data.target).value_counts().sort_index()
+
+    df = pd.DataFrame({
+        'Class': class_counts.index,
+        'Count': class_counts.values
+    })
+
+    fig = px.bar(df, x='Class', y='Count', labels={'Class': 'Class', 'Count': 'Sample Count'})
+
+    fig.update_layout(
+        title_font_size=16,
+        font=dict(size=14),
+        xaxis=dict(
+            title_font=dict(size=14),
+            tickfont=dict(size=12),
+            tickmode='linear',
+            tick0=0,
+            dtick=1
+        ),
+        yaxis=dict(
+            title_font=dict(size=14),
+            tickfont=dict(size=12)
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white',
+        margin=dict(l=0, r=0, t=30, b=30),
+        height=200
+    )
     return fig
