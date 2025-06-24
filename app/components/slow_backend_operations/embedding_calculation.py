@@ -18,16 +18,21 @@ COMPUTATION_LOCK = threading.Lock()
 
 
 def post_process(result, distance):
+    if result is None:
+        return None
     if distance == 'haversine':
-        x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]),
-                       np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
-        y = -np.arccos(np.cos(result[:, :, 0]))
-        result = np.stack([x, y], axis=-1)
-
-        # x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        # y = -np.arccos(np.cos(result[:, 0]))
-        # result = np.column_stack((x, y))
-    return result
+        if len(result.shape) == 3:
+            x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]),
+                           np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
+            y = -np.arccos(np.cos(result[:, :, 0]))
+            result = np.stack([x, y], axis=-1)
+        elif len(result.shape) == 2:
+            x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+            y = -np.arccos(np.cos(result[:, 0]))
+            result = np.column_stack((x, y))
+        else:
+            raise ValueError("Unsupported result shape for post-processing")
+    return result.astype(np.float32, copy=False)
 
 @cache.memoize()
 def compute_trimap_parametric(dataset_name):
