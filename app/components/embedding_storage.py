@@ -32,7 +32,7 @@ def load_embedding(dataset_name: str, method: str, output_metric: str) -> tuple:
     if not embedding_path.exists():
         return None, None
 
-    embedding = np.load(embedding_path)
+    embedding = np.load(embedding_path, allow_pickle=True)
     metadata = None
 
     if metadata_path.exists():
