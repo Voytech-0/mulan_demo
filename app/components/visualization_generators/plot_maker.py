@@ -215,10 +215,7 @@ def create_animated_figure(embedding, y, title, label_name):
     return fig
 
 def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
-    try:
-        if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
-            return px.scatter(title=f"{title} (no data)")
-    except TypeError:
+    if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
         return px.scatter(title=f"{title} (no data)")
 
     if 'trimap' in title.lower():
