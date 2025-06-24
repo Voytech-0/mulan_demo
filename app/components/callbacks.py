@@ -55,8 +55,9 @@ def register_callbacks(app):
         Input('parametric-iterative-switch', 'value'),
         Input('is-animated-switch', 'value'),
     )
+
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
-                      added_data_cache, distance, parametric_iterative_switch, is_animated=False):
+                      added_data_cache, distance, parametric, is_animated=False):
         if not dataset_name:
             fig = empty_fig()
             return (
@@ -95,7 +96,7 @@ def register_callbacks(app):
         # Get embeddings for all methods
         fwd_args = (dataset_name, distance)
 
-        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric_iterative_switch, export_iters=is_animated)
+        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric, export_iters=is_animated)
         tsne_emb, tsne_time = compute_tsne(*fwd_args)
         umap_emb, umap_time = compute_umap(*fwd_args)
 
@@ -104,7 +105,7 @@ def register_callbacks(app):
 
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
-            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args, parametric=parametric_iterative_switch)
+            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args, parametric=parametric)
             X, y, trimap_emb = (np.concatenate([X, X_add], 0), np.concatenate([y, y_add], 0),
                                 np.concatenate([trimap_emb, trimap_emb_add], 0))
 
@@ -243,11 +244,12 @@ def register_callbacks(app):
         State('image-display', 'style'),
         State('image-draw', 'style'),
         State('full-grid-visible', 'data'),
-
+        State('parametric-iterative-switch', 'value'),
         State('dist-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def display_or_toggle(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache, full_grid_clicks, current_grid_style, upload_new_n_clicks, image_display_style, image_draw_style, full_grid_visible, distance):
+    def display_or_toggle(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache, full_grid_clicks, current_grid_style, upload_new_n_clicks, image_display_style, image_draw_style, full_grid_visible,
+                          parametric, distance):
         enabled = generative_state.get('enabled', False) if generative_state else False
         triggered = callback_context.triggered_id
         is_image_dataset = dataset_name in IMAGE_ONLY_DATASETS
@@ -342,7 +344,7 @@ def register_callbacks(app):
         if enabled:
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
-            sample = generate_sample(x_coord, y_coord, dataset_name, distance, parametric=True)
+            sample = generate_sample(x_coord, y_coord, dataset_name, distance, parametric=parametric)
             sample = match_shape(sample, dataset_name)
             img_str = encode_img_as_str(sample)
             # In generative mode, show placeholder and hide other image elements

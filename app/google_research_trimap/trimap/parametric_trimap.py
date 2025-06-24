@@ -117,9 +117,12 @@ def fit(rng_key, inputs, n_dims,
             logging.info(f'Epoch {epoch} loss: {loss:.3}, '
                          f'trimap_loss {aux["triplet_loss"]:.3}, reconstruction_loss {aux["reconstruction_loss"]:.3}')
 
-    return model, state.params
+    model_description = {'input_dims': inputs.shape[1], 'latent_dims': n_dims}
+    return model_description, state.params
 
-def transform(inputs, model, params):
+def transform(inputs, model_description, params):
+
+    model = ParametricTriMap(**model_description)
     return model.apply({'params': params}, inputs, method=ParametricTriMap.encode)
 
 def fit_transform(rng_key, inputs, n_dims,
@@ -132,12 +135,12 @@ def fit_transform(rng_key, inputs, n_dims,
                   weight_temp=0.5,
                   distance='euclidean',
                   verbose=False):
-    model, params = fit(rng_key, inputs, n_dims, lr, n_inliers, n_outliers, n_random,
-                        n_epochs=n_epochs, reconstruction_loss_weight=reconstruction_loss_weight,
-                        weight_temp=weight_temp, distance=distance, verbose=verbose)
+    model_description, params = fit(rng_key, inputs, n_dims, lr, n_inliers, n_outliers, n_random,
+                                    n_epochs=n_epochs, reconstruction_loss_weight=reconstruction_loss_weight,
+                                    weight_temp=weight_temp, distance=distance, verbose=verbose)
+    embedding = transform(inputs, model_description, params)
+    return embedding, model_description, params
 
-    embedding = transform(inputs, model, params)
-    return embedding, model, params
-
-def inverse_transform(embedding, model, params):
+def inverse_transform(embedding, model_description, params):
+    model = ParametricTriMap(**model_description)
     return model.apply({'params': params}, embedding, method=ParametricTriMap.decode)

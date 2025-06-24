@@ -39,8 +39,8 @@ def add_new_data_to_fig(fig, df, color_map):
             y=df_subset['y'],
             mode='markers',
             marker=dict(
-                symbol='circle' if label == '-1.0' else 'x',
-                size=20 if label == '-1.0' else 10,
+                symbol='circle' if int(label) == -1 else 'x',
+                size=40 if int(label) == -1 else 20,
                 color=color_map[label],
                 line=dict(width=2, color='black')
             ),
