@@ -35,7 +35,8 @@ class TrimapWrapper:
         if self._parametric:
             self._embedding, self._model, self._params = ptrimap.fit_transform(self.key, self._data, n_dims=2)
         else:
-            self._embedding = trimap.transform(self.key, data, output_metric=self._distance_metric, export_iters=True, auto_diff=True, lr=100)
+            lr = 1 if distance_metric=='haversine' else 100
+            self._embedding = trimap.transform(self.key, data, output_metric=self._distance_metric, export_iters=True, auto_diff=not distance_metric == 'haversine', lr=lr)
         return self._embedding
 
     def transform(self, data):
