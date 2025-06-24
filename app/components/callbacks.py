@@ -55,10 +55,11 @@ def register_callbacks(app):
         Input('added-data-cache', 'data'),
         Input('dist-dropdown', 'value'),
         Input('parametric-iterative-switch', 'value'),
+        Input('is-animated-switch', 'value'),
     )
 
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
-                      added_data_cache, distance, parametric_iterative_switch):
+                      added_data_cache, distance, parametric_iterative_switch, is_animated=False):
         if not dataset_name:
             fig = empty_fig()
             return (
@@ -98,6 +99,8 @@ def register_callbacks(app):
         compute_trimap_curried = partial(compute_trimap, parametric=parametric_iterative_switch)
         # Get embeddings for all methods
         fwd_args = (X, distance, recalculate_flag, dataset_name)
+        if method == 'trimap' and is_animated:
+            fwd_args = (*fwd_args, True)  # Add is_animated flag for TRIMAP
         trimap_emb, trimap_time = get_embedding('trimap', compute_trimap_curried, *fwd_args)
         tsne_emb, tsne_time = get_embedding('tsne', compute_tsne, *fwd_args)
         umap_emb, umap_time = get_embedding('umap', compute_umap, *fwd_args)
@@ -107,8 +110,7 @@ def register_callbacks(app):
 
         X, y, trimap_emb, n_added = dynamically_add(X, y, trimap_emb, added_data_cache)
 
-        if method != 'trimap' or n_added != 0 or show_images:
-            is_animated = False
+        if method != 'trimap' or not is_animated:
             # Create static figures
             main_fig_static = create_figure(
                 trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
@@ -122,7 +124,6 @@ def register_callbacks(app):
             )
             main_fig_animated = {}
         else:
-            is_animated = True
             main_fig_static = {}
             main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class')
 
@@ -143,9 +144,9 @@ def register_callbacks(app):
         # Show/hide graphs based on is_animated
         if is_animated:
             static_style = {'display': 'none'}
-            animated_style = {'display': 'block'}
+            animated_style = {'display': 'block', 'height': '60vh'}
         else:
-            static_style = {'display': 'block'}
+            static_style = {'display': 'block', 'height': '60vh'}
             animated_style = {'display': 'none'}
 
         ctx = callback_context
@@ -243,9 +244,9 @@ def register_callbacks(app):
                     {"display": "block"},
                     hidden,  # unchanged
                     image_draw_style,
-                    True 
+                    True
                 )
-            
+
             else:
                 # When closing the full grid, reset to default (no click) state
                 return (
@@ -292,7 +293,7 @@ def register_callbacks(app):
                 '',  # selected-image src
                 get_image_style('none'),  # selected-image style
                 get_no_image_message_style('block'), # no-image-message style
-                html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),  
+                html.Div(image_message,  style={'text-align': 'center', 'color': '#999'}),
                 html.Div("Click on a point in the graph to show coordinates", style={'text-align': 'center', 'color': '#999', 'marginTop': '3rem'}),  # coordinates-display children
                 "",  # point-metadata children
                 get_no_metadata_message_style('block'),

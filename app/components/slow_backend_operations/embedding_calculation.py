@@ -27,6 +27,8 @@ def post_process(result, distance):
 
 
 def compute_trimap(X, distance, parametric=False):
+    if distance == 'euclidean':
+        distance = 'squared_euclidean'
     start_time = time.time()
     with COMPUTATION_LOCK:
         wrapper = TrimapWrapper()
@@ -64,12 +66,14 @@ def compute_umap(X, distance):
     return result, time.time() - start_time
 
 
-def get_embedding(method_name, compute_func, X, distance, recalculate_flag, dataset_name):
+def get_embedding(method_name, compute_func, X, distance, recalculate_flag, dataset_name, is_animated=False):
     # Check if we should use saved embeddings
     if not recalculate_flag and embedding_exists(dataset_name, method_name, distance):
         embedding, metadata = load_embedding(dataset_name, method_name, distance)
         compute_time = metadata['time']
         print(f"Using saved {method_name} embedding")
+        if method_name == 'trimap' and not is_animated:
+            embedding = embedding[-1]
         return embedding, compute_time
 
     # Only compute new embedding if recalculate is True or no saved embedding exists
@@ -78,7 +82,8 @@ def get_embedding(method_name, compute_func, X, distance, recalculate_flag, data
         embedding, compute_time = compute_func(X, distance)
         metadata = {'time': compute_time}
         save_embedding(dataset_name, method_name, embedding, distance, metadata)
-
+        if method_name == 'trimap' and not is_animated:
+            embedding = embedding[-1]
         return embedding, compute_time
 
     return None  # Return None if no embedding is available and we're not computing
