@@ -1,7 +1,7 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from dash_canvas import DashCanvas
-from components.configs.settings import (
+from .settings import (
     IMAGE_DISPLAY_CONTAINER_HEIGHT, SELECTED_IMAGE_STYLE, NO_IMAGE_MESSAGE_STYLE,
     GENERATIVE_PLACEHOLDER_STYLE, COORDINATES_DISPLAY_STYLE, METADATA_DISPLAY_STYLE,
     METADATA_DISPLAY_HEIGHT, BACKGROUND_COLOR, BORDER_COLOR, NO_METADATA_MESSAGE_STYLE
@@ -60,8 +60,8 @@ def create_layout(app):
                                     html.Div(id='point-metadata'),
                                     html.Div(
                                         id='no-metadata-message', style=NO_METADATA_MESSAGE_STYLE)
-                                ], style=METADATA_DISPLAY_STYLE)
-                            ], width=12, style={'padding': 0}, id='point-metadata-row')
+                                ], style=METADATA_DISPLAY_STYLE) 
+                            ], width=12, style={'padding': 0}, id='point-metadata-row')    
                         ])
                     ],
                     style={'height': IMAGE_DISPLAY_CONTAINER_HEIGHT, 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-bottom': '0.5rem',
@@ -97,7 +97,7 @@ def create_layout(app):
                 # New elements for the left column as per user's image
                 dbc.Row([
                     dbc.Col(html.Label("Dataset Type:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
-
+                    
                     dbc.Col(dcc.Dropdown(
                         id='dataset-family-dropdown',
                         options=[
@@ -168,19 +168,6 @@ def create_layout(app):
                     ), width=9)
                 ], className="mb-3 align-items-center"),
 
-                # Animation toggle below Image Space
-                dbc.Row([
-                    dbc.Col(html.Label("Animation:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
-                    dbc.Col(
-                        dbc.Switch(
-                            id="is-animated-switch",
-                            value=False,
-                            className="me-2"
-                        ),
-                        width=9
-                    )
-                ], className="mb-3 align-items-center"),
-
                 dbc.Row([
                     dbc.Col([
                         dbc.Row([
@@ -245,13 +232,13 @@ def create_layout(app):
                                 # Static main graph
                                 dcc.Graph(
                                     id='main-graph-static',
-                                    style={'height': '60vh', 'width': '100%', 'margin-bottom': '0.5rem', 'display': 'block'},
+                                    style={'height': '65vh', 'width': '100%', 'margin-bottom': '0.5rem', 'display': 'block'},
                                     config={'displayModeBar': True}
                                 ),
                                 # Animated main graph
                                 dcc.Graph(
                                     id='main-graph-animated',
-                                    style={'height': '60vh', 'width': '100%', 'margin-bottom': '0.5rem', 'display': 'none'},
+                                    style={'height': '60vh', 'margin-bottom': '0.5rem', 'display': 'none'},
                                     config={'displayModeBar': True}
                                 ),
                                 html.Div(id='calculation-status', style={'text-align': 'center', 'margin-top': '0.5rem', 'color': '#fd7e14'}),
@@ -309,16 +296,27 @@ def create_layout(app):
                     ], width=3)
                 ]),
                 html.Div(id='umap-warning', style={'color': 'red', 'margin-bottom': '0.5rem'}),
-                # Bottom row: Dataset Information (left), Dataset Augmentation (right)
+                # Bottom row
                 dbc.Row([
+                    #Left Dataset Information
                     dbc.Col(
-                        html.Div(
-                            id='metadata-display',
-                            children="",
-                            style={'height': '25vh', 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': BACKGROUND_COLOR, 'color': 'white'}
-                        ),
-                        width=7
+                        html.Div([
+                            # Title
+                            html.H5("Information about Dataset", style={'textAlign': 'center', 'color': 'white'}),
+                            html.Div(
+                                children=[
+                                html.Div(
+                                    id='metadata-display',
+                                    children="",
+                                    style={'height': '25vh', 'padding': '1rem', 'color': 'white', 'margin-top':'3rem'}
+                                ),
+                                # Middle: Class distribution plot
+                                dcc.Graph(id='class-distribution-plot', style={'height': '25vh', 'width': '60%', 'padding': '1rem', 'color': 'white', 'margin-bottom': '2rem'}),
+                            ], style={'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'space-between',  'margin-top': '1rem', 'height':'25vh'})
+                        ], style={'border': f'1px solid {BORDER_COLOR}', 'marginTop': '1rem','padding': '1rem', 'backgroundColor': '#23272b', 'height':'25vh'}),
+                        width=7,
                     ),
+                    # Right: Dataset Augmentation
                     dbc.Col(
                         html.Div([
                             html.H5("Dataset Augmentation", className="text-center mb-2", style={'color': 'white'}),
