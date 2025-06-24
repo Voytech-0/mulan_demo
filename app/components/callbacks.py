@@ -1,642 +1,34 @@
-import json
 from functools import partial
 
-import jax.random as random
-from sklearn import datasets
-from sklearn.manifold import TSNE
-import plotly.express as px
-import plotly.graph_objects as go
 import dash
-from dash import dcc, html, Input, Output, callback_context, State, callback
-import numpy as np
-import threading
 import matplotlib
-import pandas as pd
-import glob
+import numpy as np
+from dash import html, Input, Output, callback_context, State
 
-from .feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
-from .plot_maker import add_new_data_to_fig
-from .projection_wrapper import TrimapWrapper
-from .settings import get_image_style, get_no_image_message_style, get_generative_placeholder_style, CELL_STYLE, \
-    CELL_STYLE_RIGHT, TABLE_STYLE, EMPTY_METADATA_STYLE, get_no_metadata_message_style
+from components.configs.feature_config import DATASET_FEATURES
+from components.configs.settings import get_image_style, get_no_image_message_style, get_no_metadata_message_style, \
+    get_generative_placeholder_style
+from components.data_operations.dataset_api import get_dataset, dataset_shape
+from components.configs.feature_config import IMAGE_ONLY_DATASETS
+from components.slow_backend_operations.added_features_api import dynamically_add, generate_sample
+from components.slow_backend_operations.embedding_calculation import compute_tsne, compute_umap, compute_trimap, \
+    get_embedding
+from components.visualization_generators.layout_generators import create_metadata_display, create_coordinate_table, \
+    create_metadata_table
+from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape
+from components.visualization_generators.plot_maker import create_animated_figure, create_figure, empty_fig, \
+    create_datapoint_image
 
 matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-import time
-import io
-import base64
-from PIL import Image
-import tensorflow as tf
-import os
-import requests
-from io import BytesIO
-from .embedding_storage import save_embedding, load_embedding, embedding_exists
 from dash_canvas.utils import parse_jsonstring
 from math import ceil, floor
 import cv2
 
-
-from .features import generate_sample, dataset_shape
-from .plot_maker import encode_img_as_str, invisible_interactable_layer
 # Import TRIMAP from local package
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'google_research_trimap'))
-from google_research_trimap.trimap import trimap
-
-
 trimap_cache_name = 'trimap_cache'
 # Try to import UMAP, if available
-_image_cache = {}
-umap_available = False
-umap_lib = None # Use a distinct name for the imported module
-try:
-    # import umap as umap_lib # Import as umap_lib
-    import umap.umap_ as umap_lib
-    umap_available = True
-except ImportError:
-    pass # umap_lib remains None
-
-def load_PACS(domain='photo'):
-    """Load PACS dataset."""
-    base_path = os.path.join(os.path.dirname(__file__), "pacs_data", domain)
-    classes = sorted(os.listdir(base_path))
-    images = []
-    labels = []
-
-    for idx, class_name in enumerate(classes):
-        class_dir = os.path.join(base_path, class_name)
-        for ext in ('*.jpg', '*.png'):
-            for img_path in glob.glob(os.path.join(class_dir, ext)):
-                img = Image.open(img_path).convert("L").resize((28,28))
-                images.append(img)
-                labels.append(idx)
-
-    X = np.stack(images)
-    X = X.reshape(X.shape[0], -1).astype(np.float32)
-    y = np.array(labels)
-
-    class Dataset:
-        def __init__(self, data, target):
-            self.data = data
-            self.target = target
-            self.target_names = classes
-            self.feature_names = [f"pixel_{i}" for i in range(self.data.shape[1])]
-
-    return Dataset(X, y)
-
-def load_fashion_mnist():
-    """Load Fashion MNIST dataset."""
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
-    # Combine train and test sets
-    X = np.concatenate([x_train, x_test])
-    y = np.concatenate([y_train, y_test])
-    # Reshape to 2D array and convert to float
-    X = X.reshape(X.shape[0], -1).astype(np.float32)
-    # Create a dataset-like object
-    class Dataset:
-        def __init__(self, data, target):
-            self.data = data
-            self.target = target
-            self.target_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
-                               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
-            # Add feature names for Fashion MNIST (pixel coordinates)
-            self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-    return Dataset(X, y)
-
-def load_mnist():
-    """Load MNIST digits dataset."""
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-    # Combine train and test sets
-    X = np.concatenate([x_train, x_test])
-    y = np.concatenate([y_train, y_test])
-    # Reshape to 2D array and convert to float
-    X = X.reshape(X.shape[0], -1).astype(np.float32)
-    # Create a dataset-like object
-    class Dataset:
-        def __init__(self, data, target):
-            self.data = data
-            self.target = target
-            self.target_names = [str(i) for i in range(10)]
-            # Add feature names for MNIST (pixel coordinates)
-            self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-    return Dataset(X, y)
-
-def load_elephant():
-    """Load elephant dataset from a sample image with variations."""
-    # URL of a sample elephant image from a reliable source
-    url = "https://upload.wikimedia.org/wikipedia/commons/3/37/African_Bush_Elephant.jpg"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        img = Image.open(BytesIO(response.content))
-
-        # Convert to grayscale and resize
-        img = img.convert('L')
-        img = img.resize((28, 28))
-
-        # Convert to numpy array
-        base_img = np.array(img)
-
-        # Create variations of the image
-        n_samples = 10  # Create 10 variations
-        X = np.zeros((n_samples, 784))  # 28x28 = 784 pixels
-
-        # Original image
-        X[0] = base_img.reshape(-1)
-
-        # Create variations with different transformations
-        for i in range(1, n_samples):
-            # Random rotation
-            angle = np.random.uniform(-15, 15)
-            rotated = img.rotate(angle)
-            # Random brightness adjustment
-            brightness = np.random.uniform(0.8, 1.2)
-            adjusted = np.clip(np.array(rotated) * brightness, 0, 255).astype(np.uint8)
-            # Add some noise
-            noise = np.random.normal(0, 10, adjusted.shape).astype(np.uint8)
-            noisy = np.clip(adjusted + noise, 0, 255).astype(np.uint8)
-            X[i] = noisy.reshape(-1)
-
-        y = np.zeros(n_samples)  # All samples are class 0 (elephant)
-
-        # Create a dataset-like object
-        class Dataset:
-            def __init__(self, data, target):
-                self.data = data
-                self.target = target
-                self.target_names = ['Elephant']
-                # Add feature names for Elephant (pixel coordinates)
-                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-        return Dataset(X, y)
-    except Exception as e:
-        print(f"Error loading elephant image: {str(e)}")
-        # Return a fallback dataset with multiple samples if image loading fails
-        n_samples = 10
-        X = np.random.rand(n_samples, 784)  # Random data
-        y = np.zeros(n_samples)
-        class Dataset:
-            def __init__(self, data, target):
-                self.data = data
-                self.target = target
-                self.target_names = ['Elephant']
-                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-        return Dataset(X, y)
-
-# List of available datasets
-DATASET_LOADERS = {
-    "Digits": datasets.load_digits,
-    "Iris": datasets.load_iris,
-    "Wine": datasets.load_wine,
-    "Breast Cancer": datasets.load_breast_cancer,
-    "Fashion MNIST": load_fashion_mnist,
-    "MNIST": load_mnist,
-    "Elephant": load_elephant,
-    "PACS - Photo": lambda: load_PACS("photo"),
-    "PACS - Sketch": lambda: load_PACS("sketch"),
-    "PACS - Cartoon": lambda: load_PACS("cartoon"),
-    "PACS - Art Painting": lambda: load_PACS("art_painting"),
-}
-
-# Single global lock for computations
-numba_global_lock = threading.Lock()
-
-def get_dataset(name):
-    with numba_global_lock:
-        if name == 'custom_upload':
-            # Return a placeholder dataset for custom upload
-            # This will be handled by the upload functionality later
-            X = np.random.rand(10, 4)  # Placeholder data
-            y = np.zeros(10)  # Placeholder labels
-            class Dataset:
-                def __init__(self, data, target):
-                    self.data = data
-                    self.target = target
-                    self.target_names = ['Custom']
-                    self.feature_names = [f'Feature {i}' for i in range(data.shape[1])]
-            data = Dataset(X, y)
-        else:
-            loader = DATASET_LOADERS[name]
-            data = loader()
-            X = data.data
-            y = data.target
-    return X, y, data
 
 
-def compute_trimap(X, distance, parametric=False):
-    start_time = time.time()
-    with numba_global_lock:
-        wrapper = TrimapWrapper()
-        emb = wrapper.fit_transform(X, distance_metric=distance)
-        wrapper.store(trimap_cache_name)
-        result = np.array(emb) if hasattr(emb, "shape") else emb
-        total_time = time.time() - start_time
-    if distance == 'haversine':
-        x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]), np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
-        y = -np.arccos(np.cos(result[:, :, 0]))
-        result = np.stack([x, y], axis=-1)
-        # x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        # y = -np.arccos(np.cos(result[:, 0]))
-        # result = np.column_stack((x, y))
-    return result, total_time
-
-
-def compute_tsne(X, distance):
-    if distance == 'haversine':
-        print("t-SNE is not supported for haversine distance. Returning None.")
-        return None, 0
-    start_time = time.time()
-    with numba_global_lock:
-        print('calculating tsne')
-        emb = TSNE(n_components=2, random_state=42, metric=distance).fit_transform(X)
-        result = np.array(emb)
-        print('tsne calculated')
-    return result, time.time() - start_time
-
-
-def compute_umap(X, distance):
-    start_time = time.time()
-    with numba_global_lock:
-        print('calculating umap')
-        reducer = umap_lib.UMAP(n_components=2, random_state=42, output_metric=distance)
-        emb = reducer.fit_transform(X)
-        result = np.array(emb)
-        print('umap calculated')
-    if distance == 'haversine':
-        x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        y = -np.arccos(np.cos(result[:, 0]))
-        result = np.column_stack((x, y))
-    return result, time.time() - start_time
-
-def create_datapoint_image(data_point, size=(20, 20)):
-    """Create a small image representation of a datapoint."""
-    # Create a cache key based on the data point and size
-    cache_key = (hash(data_point.tobytes()), size)
-
-    # Check if we have this image cached
-    if cache_key in _image_cache:
-        return _image_cache[cache_key]
-
-    # Normalize the data point to 0-1 range
-    normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
-
-    # Reshape if needed (assuming square image)
-    side_length = int(np.sqrt(len(normalized)))
-    if side_length * side_length == len(normalized):
-        img_data = normalized.reshape(side_length, side_length)
-        # Use grayscale colormap for image datasets
-        cmap = 'gray'
-        # Adjust figure size based on the actual image dimensions
-        if side_length == 8:  # Digits dataset
-            fig_size = (size[0]/50, size[1]/50)  # Smaller for 8x8
-        else:  # MNIST/Fashion MNIST/Elephant (28x28)
-            fig_size = (size[0]/25, size[1]/25)  # Larger for 28x28
-    else:
-        # If not a perfect square, create a rectangular image
-        img_data = normalized.reshape(-1, 8)  # Arbitrary width of 8
-        # Use viridis for non-image datasets
-        cmap = 'viridis'
-        fig_size = (size[0]/100, size[1]/100)
-
-    # Create the image with higher DPI for sharper pixels
-    plt.figure(figsize=fig_size, dpi=300)  # Increased DPI from 100 to 300
-    plt.imshow(img_data, cmap=cmap, interpolation='nearest')  # Use nearest neighbor interpolation
-    plt.axis('off')
-
-    # Convert to base64
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
-    plt.close()
-    buf.seek(0)
-    img_str = base64.b64encode(buf.read()).decode()
-    img_data_url = f"data:image/png;base64,{img_str}"
-
-    # Cache the result
-    _image_cache[cache_key] = img_data_url
-
-    # Limit cache size to prevent memory issues
-    if len(_image_cache) > 1000:
-        # Remove oldest entries (simple FIFO)
-        oldest_keys = list(_image_cache.keys())[:100]
-        for key in oldest_keys:
-            del _image_cache[key]
-
-    return img_data_url
-
-def create_animated_figure(embedding, y, title, label_name):
-    n_frames = min(400, len(embedding))
-    frames = []
-    # Use y for all frames (assume y is static)
-    point_indices = np.arange(len(y))
-    # Initial frame
-    df0 = pd.DataFrame({
-        'x': embedding[0][:, 0],
-        'y': embedding[0][:, 1],
-        'color': y.astype(str),
-        'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
-        'point_index': point_indices,
-        'label': y.astype(str)
-    })
-    # Use a consistent color palette for both px.scatter and go.Scatter
-    color_palette = px.colors.qualitative.Light24
-
-    # Compute global min/max for all frames for fixed axes
-    all_x = np.concatenate([emb[:, 0] for emb in embedding[:n_frames]])
-    all_y = np.concatenate([emb[:, 1] for emb in embedding[:n_frames]])
-    x_range = [float(all_x.min()), float(all_x.max())]
-    y_range = [float(all_y.min()), float(all_y.max())]
-
-    fig = px.scatter(
-        df0,
-        x='x',
-        y='y',
-        color='color',
-        custom_data=['point_index', 'label'],
-        title=title,
-        labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
-        color_discrete_sequence=color_palette,
-        range_x=x_range,
-        range_y=y_range
-    )
-    # Build frames
-    for i in range(n_frames):
-        dfi = pd.DataFrame({
-            'x': embedding[i][:, 0],
-            'y': embedding[i][:, 1],
-            'color': y.astype(str),
-            'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
-            'point_index': point_indices,
-            'label': y.astype(str)
-        })
-        scatter = go.Scatter(
-            x=dfi['x'],
-            y=dfi['y'],
-            mode='markers',
-            marker=dict(
-                color=dfi['color_num'],
-                colorscale=color_palette,
-                cmin=0,
-                cmax=len(color_palette) - 1
-            ),
-            customdata=np.stack([dfi['point_index'], dfi['label']], axis=-1),
-            showlegend=False,
-            hovertemplate="Class: %{customdata[1]}<br>Index: %{customdata[0]}<br>X: %{x}<br>Y: %{y}<extra></extra>"
-        )
-        frames.append(go.Frame(data=[scatter], name=str(i)))
-    fig.frames = frames
-
-    # Add animation slider
-    sliders = [{
-        "steps": [
-            {
-                "args": [
-                    [str(k)],
-                    {
-                        "frame": {"duration": 0, "redraw": True},
-                        "mode": "immediate",
-                        "transition": {"duration": 0}
-                    }
-                ],
-                "label": str(k),
-                "method": "animate"
-            } for k in range(n_frames)
-        ],
-        "transition": {"duration": 0},
-        "x": 0.1,
-        "y": -0.15,
-        "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
-        "len": 0.9
-    }]
-    fig.update_layout(
-        updatemenus=[{
-            "type": "buttons",
-            "buttons": [
-                {
-                    "args": [
-                        None,
-                        {
-                            "frame": {"duration": 50, "redraw": True},
-                            "fromcurrent": True,
-                            "transition": {"duration": 0}
-                        }
-                    ],
-                    "label": "Play",
-                    "method": "animate"
-                },
-                {
-                    "args": [
-                        [None],
-                        {
-                            "frame": {"duration": 0, "redraw": True},
-                            "mode": "immediate",
-                            "transition": {"duration": 0}
-                        }
-                    ],
-                    "label": "Pause",
-                    "method": "animate",
-                    "args": [
-                        [],
-                        {
-                            "mode": "immediate",
-                            "frame": {"duration": 0, "redraw": False},
-                            "transition": {"duration": 0}
-                        }
-                    ]
-                }
-            ],
-            "direction": "left",
-            "pad": {"r": 10, "t": 70},
-            "showactive": False,
-            "x": 0.1,
-            "y": -0.15,
-            "xanchor": "right",
-            "yanchor": "top"
-        }],
-        sliders=sliders,
-        margin=dict(l=5, r=5, t=50, b=5)
-    )
-    return fig
-
-
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
-    if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
-        return px.scatter(title=f"{title} (no data)")
-
-    if 'trimap' in title.lower():
-        if show_images or is_thumbnail or n_added > 0:
-            embedding = embedding[-1]
-            print("Using last frame of TRIMAP embedding for visualization")
-
-    # Create a list of customdata for each point, including the point index
-    point_indices = np.arange(len(y))
-
-    # If class_names is not provided, use unique values in y as strings
-    if class_names is None:
-        unique_classes = np.unique(y)
-        class_names = [str(c) for c in unique_classes]
-
-    # Map y to class names for legend
-    y_int = y.astype(int)
-    y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-
-    unique_labels = pd.Series(y_labels).unique()
-    color_seq = px.colors.qualitative.Plotly
-    color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
-    n_original = len(y) - n_added
-    sections = [slice(0, n_original)]
-
-    visualize_added_samples = n_added > 0 and embedding.shape[0] == X.shape[0]
-    if visualize_added_samples:
-        sections.append(slice(n_original, None))
-
-    data_frames = []
-    for section in sections:
-        df = pd.DataFrame({
-            'x': embedding[section, 0],
-            'y': embedding[section, 1],
-            'point_index': point_indices[section],
-            'label': y_labels[section]
-        })
-        df['color'] = df['label'].map(color_map)
-        data_frames.append(df)
-
-    # Set category order for consistent color mapping
-    category_orders = {'color': class_names}
-
-    # Check if we should show images and if we have image data
-    df = data_frames[0]
-    if show_images and X is not None and len(X) > 0:
-        if len(X[0]) in [64, 784]:
-            max_images = 100
-            if len(X) > max_images:
-                step = len(X) // max_images
-                indices_to_show = list(range(0, len(X), step))[:max_images]
-                print(f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show)/len(X)*100:.1f}%)")
-            else:
-                indices_to_show = list(range(len(X)))
-                print(f"Showing all {len(indices_to_show)} images")
-            images = []
-            for i in indices_to_show:
-                img_str = create_datapoint_image(X[i], size=(15, 15))
-                images.append(img_str)
-            fig = px.scatter(
-                df,
-                x='x',
-                y='y',
-                color='label',
-                custom_data=['point_index', 'label'],
-                title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-                category_orders=category_orders
-            )
-            fig.update_traces(
-                marker=dict(
-                    size=15,
-                    sizeref=1,
-                    sizemin=5,
-                    sizemode='diameter'
-                ),
-                selector=dict(type='scatter')
-            )
-            if show_images and X is not None:
-                hover_texts = []
-                for i in df['point_index']:
-                    img_str = create_datapoint_image(X[i], size=(30, 30))
-                    hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
-                    hover_texts.append(hover_html)
-
-            fig.update_traces(
-                marker=dict(
-                    size=15,
-                    sizeref=1,
-                    sizemin=5,
-                    sizemode='diameter'
-                ),
-                hoverinfo="text",
-                hovertemplate=None,
-                text=hover_texts,
-                selector=dict(type='scatter')
-            )
-            for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
-                x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
-                x_range = df['x'].max() - df['x'].min()
-                y_range = df['y'].max() - df['y'].min()
-                base_size = max(x_range, y_range) * 0.04
-                fig.add_layout_image(
-                    dict(
-                        source=img_str,
-                        xref="x",
-                        yref="y",
-                        x=x,
-                        y=y,
-                        sizex=base_size,
-                        sizey=base_size,
-                        xanchor="center",
-                        yanchor="middle"
-                    )
-                )
-        else:
-            fig = px.scatter(
-                df,
-                x='x',
-                y='y',
-                color='label',
-                custom_data=['point_index', 'label'],
-                title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-                category_orders=category_orders
-            )
-    else:
-        fig = px.scatter(
-            df,
-            x='x',
-            y='y',
-            color='label',
-            custom_data=['point_index', 'label'],
-            title=title,
-            labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-            category_orders=category_orders
-        )
-
-
-    # Additional points
-    if visualize_added_samples:
-        add_new_data_to_fig(fig, data_frames[1], color_map)
-
-    if is_thumbnail:
-        fig.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showticklabels=False, visible=False),
-            yaxis=dict(showticklabels=False, visible=False),
-            showlegend=False,
-            hovermode=False
-        )
-    else:
-        df = data_frames[0]
-        fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
-        fig.update_layout(
-            margin=dict(l=5, r=5, t=50, b=5)
-        )
-    return fig
-
-def create_metadata_display(dataset_name, data):
-    # This function is now mostly for the dataset-level metadata, not point-level
-    return html.Div([
-                html.Div([
-                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
-                    # information abou the dataset
-                    # html.P(f"{}
-                    # html.P(f"{}
-                    html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
-                    html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
-                    html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
-                ], style={'text-align': 'center'})
-            ], style={
-                'display': 'flex',
-                'flexDirection': 'column',
-                'justifyContent': 'center',
-                'alignItems': 'center',
-                'textAlign': 'center'
-            })
 
 def register_callbacks(app):
     @app.callback(
@@ -647,7 +39,6 @@ def register_callbacks(app):
         Output('trimap-thumbnail', 'figure'),
         Output('tsne-thumbnail', 'figure'),
         Output('umap-thumbnail', 'figure'),
-        Output('umap-warning', 'children'),
         Output('metadata-display', 'children'),
         Output('embedding-cache', 'data'),
         Output('trimap-timing', 'children'),
@@ -669,12 +60,12 @@ def register_callbacks(app):
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
                       added_data_cache, distance, parametric_iterative_switch):
         if not dataset_name:
-            empty_fig = px.scatter(title="No dataset selected")
+            fig = empty_fig()
             return (
-                empty_fig, {'display': 'block'},
+                fig, {'display': 'block'},
                 {}, {'display': 'none'},
-                empty_fig, empty_fig, empty_fig,
-                "", "", {}, "", "", ""
+                fig, fig, fig,
+                "", {}, "", "", ""
             )
 
         # Handle None value for show_images (default to False)
@@ -703,86 +94,20 @@ def register_callbacks(app):
             else:
                 method = 'trimap'  # Default method
 
-        # Initialize timing variables
-        trimap_time = 0
-        tsne_time = 0
-        umap_time = 0
-
-        # Function to compute or load embeddings
-        def get_embedding(method_name, compute_func, *args):
-            nonlocal trimap_time, tsne_time, umap_time
-
-            # Check if we should use saved embeddings
-            if not recalculate_flag and embedding_exists(dataset_name, method_name, distance):
-                embedding, metadata = load_embedding(dataset_name, method_name, distance)
-                if embedding is not None:
-                    # Update timing from metadata if available
-                    if metadata and 'time' in metadata:
-                        if method_name == 'trimap':
-                            trimap_time = metadata['time']
-                        elif method_name == 'tsne':
-                            tsne_time = metadata['time']
-                        elif method_name == 'umap':
-                            umap_time = metadata['time']
-                    print(f"Using saved {method_name} embedding")
-                    return embedding
-
-            # Only compute new embedding if recalculate is True or no saved embedding exists
-            if recalculate_flag or not embedding_exists(dataset_name, method_name, distance):
-                print(f"Computing new {method_name} embedding")
-                embedding, compute_time = compute_func(*args)
-
-                # Save the embedding if computation was successful
-                if embedding is not None:
-                    metadata = {'time': compute_time}
-                    save_embedding(dataset_name, method_name, embedding, distance, metadata)
-
-                    # Update timing
-                    if method_name == 'trimap':
-                        trimap_time = compute_time
-                    elif method_name == 'tsne':
-                        tsne_time = compute_time
-                    elif method_name == 'umap':
-                        umap_time = compute_time
-
-                return embedding
-
-            return None  # Return None if no embedding is available and we're not computing
 
         compute_trimap_curried = partial(compute_trimap, parametric=parametric_iterative_switch)
         # Get embeddings for all methods
-        trimap_emb = get_embedding('trimap', compute_trimap_curried, X, distance)
-        tsne_emb = get_embedding('tsne', compute_tsne, X, distance)
-        umap_emb = get_embedding('umap', compute_umap, X, distance)
+        fwd_args = (X, distance, recalculate_flag, dataset_name)
+        trimap_emb, trimap_time = get_embedding('trimap', compute_trimap_curried, *fwd_args)
+        tsne_emb, tsne_time = get_embedding('tsne', compute_tsne, *fwd_args)
+        umap_emb, umap_time = get_embedding('umap', compute_umap, *fwd_args)
 
         # Get class names for legend
         class_names = getattr(data, 'target_names', None)
 
-        n_added = 0
-        X_add, y_add, emb_add = None, None, None
-        for source in ['user_generated', 'augmented']:
-            if source in added_data_cache: # cache not empty
-                if source == 'user_generated':
-                    X_add = np.array(added_data_cache['user_generated'])
-                    y_add = np.zeros(X_add.shape[0]) - 1
-                elif X_add is None:
-                    X_add, y_add = added_data_cache['augmented']
-                else:
-                    X_add2, y_add2 = added_data_cache['augmented']
-                    X_add = np.concatenate((X_add, X_add2))
-                    y_add = np.concatenate((y_add, y_add2))
+        X, y, trimap_emb, n_added = dynamically_add(X, y, trimap_emb, added_data_cache)
 
-        if X_add is not None:
-            n_added = len(X_add)
-            wrapper = TrimapWrapper.load(trimap_cache_name)
-            emb_add = wrapper.transform(X_add)
-            trimap_emb = np.concatenate((trimap_emb, emb_add))
-            X = np.concatenate((X, X_add), axis=0)
-            y = np.concatenate((y, y_add), axis=0)
-
-        is_animated = None
-        # return create_animated_figure(embedding, y, title, label_name)
-        if method != 'trimap' or n_added!=0 or  show_images:
+        if method != 'trimap' or n_added != 0 or show_images:
             is_animated = False
             # Create static figures
             main_fig_static = create_figure(
@@ -805,10 +130,6 @@ def register_callbacks(app):
         tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
         umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
 
-        # UMAP warning
-        umap_warning = "" if umap_available else "UMAP is not available. Please install it using: pip install umap-learn"
-
-        # Metadata display
         metadata = create_metadata_display(dataset_name, data)
 
         # Update cache only if we have new embeddings
@@ -855,7 +176,6 @@ def register_callbacks(app):
             trimap_fig,
             tsne_fig,
             umap_fig,
-            umap_warning,
             metadata,
             cached_embeddings,
             f"TRIMAP: {trimap_time:.2f}s",
@@ -989,9 +309,9 @@ def register_callbacks(app):
         if enabled:
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
-            wrapper = TrimapWrapper.load(trimap_cache_name)
-            sample = wrapper.inverse_transform(np.array([x_coord, y_coord]))
-            img_str = encode_img_as_str(sample, dataset_name)
+            sample = generate_sample(x_coord, y_coord)
+            sample = match_shape(sample, dataset_name)
+            img_str = encode_img_as_str(sample)
             # In generative mode, show placeholder and hide other image elements
             return (
                 f'data:image/png;base64,{img_str}',
@@ -1040,57 +360,15 @@ def register_callbacks(app):
         y_coord = point_data['y']
 
         # Create coordinates display with all requested fields
-        coordinates_table = html.Table([
-            html.Thead(
-                html.Tr([
-                    html.Th("Property", style=CELL_STYLE),
-                    html.Th("Value", style=CELL_STYLE_RIGHT)
-                ])
-            ),
-            html.Tbody([
-                html.Tr([
-                    html.Td("Sample", style=CELL_STYLE),
-                    html.Td(f"#{point_index}", style=CELL_STYLE_RIGHT)
-                ]),
-                html.Tr([
-                    html.Td("Class", style=CELL_STYLE),
-                    html.Td(class_label, style=CELL_STYLE_RIGHT)
-                ]),
-                html.Tr([
-                    html.Td("Label", style=CELL_STYLE),
-                    html.Td(digit_label, style=CELL_STYLE_RIGHT)
-                ]),
-                html.Tr([
-                    html.Td("X Coordinate", style=CELL_STYLE),
-                    html.Td(f"{x_coord:.4f}", style=CELL_STYLE_RIGHT)
-                ]),
-                html.Tr([
-                    html.Td("Y Coordinate", style=CELL_STYLE),
-                    html.Td(f"{y_coord:.4f}", style=CELL_STYLE_RIGHT)
-                ])
-            ])
-        ], style=TABLE_STYLE)
+        coordinates_table = create_coordinate_table(x_coord, y_coord, point_index, class_label, digit_label)
 
         # Create metadata table
-        metadata_table = html.Table([
-            html.Thead(
-                html.Tr([
-                    html.Th("Feature", style=CELL_STYLE),
-                    html.Th("Value", style=CELL_STYLE_RIGHT)
-                ])
-            ),
-            html.Tbody([
-                html.Tr([
-                    html.Td(name, style=CELL_STYLE),
-                    html.Td(f"{value:.4f}", style=CELL_STYLE_RIGHT)
-                ])
-                for name, value in zip(features_to_display, X[point_index][:len(features_to_display)])
-            ])
-        ], style=TABLE_STYLE)
+        metadata_table = create_metadata_table(features_to_display, X, point_index)
 
         # For image datasets (Digits, MNIST, Fashion MNIST, Elephant), create and display the image
         if dataset_name in ["Digits", "MNIST", "Fashion MNIST", "Elephant", "PACS - Photo", "PACS - Cartoon", "PACS - Art Painting"]:
-            img_str = encode_img_as_str(X[point_index], dataset_name)
+            sample = match_shape(X[point_index], dataset_name)
+            img_str = encode_img_as_str(sample)
 
             # For image-only datasets, show empty metadata
             if dataset_name in IMAGE_ONLY_DATASETS:
@@ -1254,22 +532,22 @@ def register_callbacks(app):
         return ""
 
     # Callback for Upload New Datapoint button
-    #@app.callback(
-    #    Output('image-display', 'style'),
-    #    Output('image-draw', 'style'),
-    #    Input('upload-new-datapoint-btn', 'n_clicks'),
-    #    prevent_initial_call=True
-    #)
-    #def handle_upload_new_datapoint_button(n_clicks):
+    @app.callback(
+        Output('image-display', 'style', allow_duplicate=True),
+        Output('image-draw', 'style', allow_duplicate=True),
+        Input('upload-new-datapoint-btn', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def handle_upload_new_datapoint_button(n_clicks):
         # Dynamic transforms
-    #    style1 = {'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem',
-    #              'display': 'block', 'visibility': 'hidden'}
-    #    style2 = style1.copy()
-    #    style2['height'] = '56vh'
-    #    style2['visibility'] = 'visible'
-    #    if n_clicks % 2 == 0:
-    #        style1, style2 = style2, style1
-    #    return style1, style2
+        style1 = {'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem',
+                 'display': 'block', 'visibility': 'hidden'}
+        style2 = style1.copy()
+        style2['height'] = '56vh'
+        style2['visibility'] = 'visible'
+        if n_clicks % 2 == 0:
+           style1, style2 = style2, style1
+        return style1, style2
 
     @app.callback(
         Output('canvas', 'json_data'),  # Clear the canvas

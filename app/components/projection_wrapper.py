@@ -25,7 +25,7 @@ class TrimapWrapper:
     @staticmethod
     def ensure_batch(data):
         if len(data.shape) == 2:
-            data = data.expand_dims(0)
+            data = np.expand_dims(data, 0)
         return data
 
     def fit_transform(self, data, distance_metric, parametric=False):
