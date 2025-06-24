@@ -7,22 +7,25 @@ import google_research_trimap.trimap.trimap as trimap
 import google_research_trimap.trimap.parametric_trimap as ptrimap
 import jax.random as random
 
-def _ensure_batch(data, n_dims=2):
+def _ensure_batch(data, n_dims=1):
     if len(data.shape) == n_dims:
         data = np.expand_dims(data, 0)
     return data
 
 def extract_added_data(added_data):
     X_add, y_add = None, None
+    def extract_as_np(x, y):
+        return np.asarray(x), np.asarray(y)
+
     for source in ['user_generated', 'augmented']:
         if source in added_data:  # cache not empty
             if source == 'user_generated':
                 X_add = np.array(added_data['user_generated'])
                 y_add = np.zeros(X_add.shape[0]) - 1
             elif X_add is None:
-                X_add, y_add = added_data['augmented']
+                X_add, y_add = extract_as_np(*added_data['augmented'])
             else:
-                X_add2, y_add2 = added_data['augmented']
+                X_add2, y_add2 = extract_as_np(*added_data['augmented'])
                 X_add = np.concatenate((X_add, X_add2), axis=0)
                 y_add = np.concatenate((y_add, y_add2), axis=0)
     n_added = X_add.shape[0] if X_add is not None else 0
@@ -39,7 +42,7 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
         emb_add = ptrimap.transform(X_add, model, params)
     else:
         key = random.PRNGKey(0)
-        embedding = compute_trimap_iterative(dataset, distance)
+        embedding, _ = compute_trimap_iterative(dataset, distance)
         X, _, _ = get_dataset(dataset)
         emb_add = trimap.embed_new_points(key, X_add, X, embedding)
 
@@ -48,13 +51,12 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
 def generate_sample(x_coord, y_coord, dataset, distance, parametric=False):
     key = random.PRNGKey(0)
     data = _ensure_batch(np.array([x_coord, y_coord]))
-
     if parametric:
-        _, _, model, params = compute_trimap_parametric(data)
+        _, _, model, params = compute_trimap_parametric(dataset)
         inverse = ptrimap.inverse_transform(key, model, params)
     else:
         embeddings, _ = compute_trimap_iterative(dataset, distance)
         X, _, _ = get_dataset(dataset)
-        inverse = trimap.inverse_transform(key, data, X, embeddings[-1])
+        inverse = trimap.inverse_transform(key, data, X, embeddings, verbose=True)
     return inverse
 

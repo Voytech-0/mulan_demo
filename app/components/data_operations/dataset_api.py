@@ -161,7 +161,7 @@ numba_global_lock = threading.Lock()
 
 def get_dataset(name):
     with numba_global_lock:
-        if name == 'custom_upload':
+        if name is 'custom_upload':
             # Return a placeholder dataset for custom upload
             # This will be handled by the upload functionality later
             X = np.random.rand(10, 4)  # Placeholder data
