@@ -10,9 +10,8 @@ from components.configs.settings import get_image_style, get_no_image_message_st
     get_generative_placeholder_style
 from components.data_operations.dataset_api import get_dataset, dataset_shape
 from components.configs.feature_config import IMAGE_ONLY_DATASETS
-from components.slow_backend_operations.added_features_api import dynamically_add, generate_sample
-from components.slow_backend_operations.embedding_calculation import compute_tsne, compute_umap, compute_trimap, \
-    get_embedding
+from components.slow_backend_operations.added_features_api import dynamically_add, generate_sample, extract_added_data
+from components.slow_backend_operations.embedding_calculation import compute_tsne, compute_umap, compute_trimap
 from components.visualization_generators.layout_generators import create_metadata_display, create_coordinate_table, \
     create_metadata_table
 from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape
@@ -106,8 +105,11 @@ def register_callbacks(app):
         # Get class names for legend
         class_names = getattr(data, 'target_names', None)
 
-        # X, y, trimap_emb, n_added = dynamically_add(X, y, trimap_emb, added_data_cache, parametric=False)
-        n_added = 0
+        X_add, y_add, n_added = extract_added_data(added_data_cache)
+        if n_added > 0:
+            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args, parametric=parametric_iterative_switch)
+            X, y, trimap_emb = (np.concatenate([X, X_add], 0), np.concatenate([y, y_add], 0),
+                                np.concatenate([trimap_emb, trimap_emb_add], 0))
 
         if method != 'trimap' or not is_animated:
             # Create static figures
@@ -213,9 +215,11 @@ def register_callbacks(app):
         State('image-display', 'style'),
         State('image-draw', 'style'),
         State('full-grid-visible', 'data'),
+
+        State('dist-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def display_or_toggle(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache, full_grid_clicks, current_grid_style, upload_new_n_clicks, image_display_style, image_draw_style, full_grid_visible):
+    def display_or_toggle(clickData, generative_state, dataset_name, last_clicked_dataset, figure, embedding_cache, full_grid_clicks, current_grid_style, upload_new_n_clicks, image_display_style, image_draw_style, full_grid_visible, distance):
         enabled = generative_state.get('enabled', False) if generative_state else False
         triggered = callback_context.triggered_id
         is_image_dataset = dataset_name in IMAGE_ONLY_DATASETS
@@ -310,7 +314,7 @@ def register_callbacks(app):
         if enabled:
             x_coord = clickData['points'][0]['x']
             y_coord = clickData['points'][0]['y']
-            sample = generate_sample(x_coord, y_coord)
+            sample = generate_sample(x_coord, y_coord, dataset_name, distance, parametric=True)
             sample = match_shape(sample, dataset_name)
             img_str = encode_img_as_str(sample)
             # In generative mode, show placeholder and hide other image elements
