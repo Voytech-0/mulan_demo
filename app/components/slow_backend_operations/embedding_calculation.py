@@ -5,7 +5,7 @@ import umap
 from sklearn.manifold import TSNE
 
 from components.embedding_storage import load_embedding, embedding_exists, save_embedding
-from components.projection_wrapper import TrimapWrapper
+from components.slow_backend_operations.projection_wrapper import TrimapWrapper
 import numpy as np
 
 
