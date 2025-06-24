@@ -45,7 +45,7 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
 
     return emb_add
 
-def generate_sample(x_coord, y_coord, dataset, distance, parametric=False):
+def generate_sample(x_coord, y_coord, dataset, distance, parametric=False, export_iters=False):
     key = random.PRNGKey(0)
     data = _ensure_batch(np.array([x_coord, y_coord]))
 
@@ -53,7 +53,7 @@ def generate_sample(x_coord, y_coord, dataset, distance, parametric=False):
         _, _, model, params = compute_trimap_parametric(data)
         inverse = ptrimap.inverse_transform(key, model, params)
     else:
-        embeddings, _ = compute_trimap_iterative(dataset, distance)
+        embeddings, _ = compute_trimap_iterative(dataset, distance, export_iters)
         X, _, _ = get_dataset(dataset)
         inverse = trimap.inverse_transform(key, data, X, embeddings[-1])
     return inverse

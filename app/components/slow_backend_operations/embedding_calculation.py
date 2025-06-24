@@ -18,16 +18,21 @@ COMPUTATION_LOCK = threading.Lock()
 
 
 def post_process(result, distance):
+    if result is None:
+        return None
     if distance == 'haversine':
-        x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]),
-                       np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
-        y = -np.arccos(np.cos(result[:, :, 0]))
-        result = np.stack([x, y], axis=-1)
-
-        # x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
-        # y = -np.arccos(np.cos(result[:, 0]))
-        # result = np.column_stack((x, y))
-    return result
+        if len(result.shape) == 3:
+            x = np.arctan2(np.sin(result[:, :, 0]) * np.cos(result[:, :, 1]),
+                           np.sin(result[:, :, 0]) * np.sin(result[:, :, 1]))
+            y = -np.arccos(np.cos(result[:, :, 0]))
+            result = np.stack([x, y], axis=-1)
+        elif len(result.shape) == 2:
+            x = np.arctan2(np.sin(result[:, 0]) * np.cos(result[:, 1]), np.sin(result[:, 0]) * np.sin(result[:, 1]))
+            y = -np.arccos(np.cos(result[:, 0]))
+            result = np.column_stack((x, y))
+        else:
+            raise ValueError("Unsupported result shape for post-processing")
+    return result.astype(np.float32, copy=False)
 
 @cache.memoize()
 def compute_trimap_parametric(dataset_name):
@@ -42,24 +47,27 @@ def compute_trimap_parametric(dataset_name):
     return result, total_time, model, params
 
 @cache.memoize()
-def compute_trimap_iterative(dataset_name, distance):
+def compute_trimap_iterative(dataset_name, distance, export_iters=False):
+    if distance == 'euclidean':
+        distance = 'squared_euclidean'
     X, _, _ = get_dataset(dataset_name)
     start_time = time.time()
     key = random.PRNGKey(42)  # Deterministic
+    lr = 1 if distance == 'haversine' else 100
     with COMPUTATION_LOCK:
-        emb = trimap.transform(key, X, verbose=True)
+        emb = trimap.transform(key, X, verbose=False, auto_diff=not distance == 'haversine', lr=lr, export_iters=export_iters, output_metric=distance)
         result = np.array(emb) if hasattr(emb, "shape") else emb
         total_time = time.time() - start_time
 
     result = post_process(result, distance)
     return result, total_time
 
-def compute_trimap(dataset_name, distance, parametric):
+def compute_trimap(dataset_name, distance, parametric, export_iters=False):
     print('calculating trimap')
     if parametric:
         result, total_time, _, _ = compute_trimap_parametric(dataset_name)
     else:
-        result, total_time = compute_trimap_iterative(dataset_name, distance)
+        result, total_time = compute_trimap_iterative(dataset_name, distance, export_iters)
     print('trimap calculated')
     return result, total_time
 

@@ -55,7 +55,6 @@ def register_callbacks(app):
         Input('parametric-iterative-switch', 'value'),
         Input('is-animated-switch', 'value'),
     )
-
     def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
                       added_data_cache, distance, parametric_iterative_switch, is_animated=False):
         if not dataset_name:
@@ -95,10 +94,8 @@ def register_callbacks(app):
 
         # Get embeddings for all methods
         fwd_args = (dataset_name, distance)
-        if method == 'trimap' and is_animated:
-            fwd_args = (*fwd_args, True)  # Add is_animated flag for TRIMAP
 
-        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric_iterative_switch)
+        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric_iterative_switch, export_iters=is_animated)
         tsne_emb, tsne_time = compute_tsne(*fwd_args)
         umap_emb, umap_time = compute_umap(*fwd_args)
 
@@ -112,6 +109,7 @@ def register_callbacks(app):
                                 np.concatenate([trimap_emb, trimap_emb_add], 0))
 
         if method != 'trimap' or not is_animated:
+            is_animated = False
             # Create static figures
             main_fig_static = create_figure(
                 trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
@@ -125,7 +123,6 @@ def register_callbacks(app):
             )
             main_fig_animated = {}
         else:
-            is_animated = True
             main_fig_static = {}
             main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class')
 
@@ -186,6 +183,37 @@ def register_callbacks(app):
             f"UMAP: {umap_time:.2f}s",
             calc_status
         )
+
+
+    # Mutually exclusive switches callback
+    @app.callback(
+        Output('is-animated-switch', 'value'),
+        Output('parametric-iterative-switch', 'value'),
+        Output('dots-images-switch', 'value'),
+        Output('upload-new-datapoint-btn', 'disabled'),
+        Input('is-animated-switch', 'value'),
+        Input('parametric-iterative-switch', 'value'),
+        Input('dots-images-switch', 'value'),
+        prevent_initial_call=True
+    )
+    def mutually_exclusive_switches(is_animated, parametric_iterative, dots_images):
+        ctx = callback_context
+        if not ctx.triggered:
+            # No trigger, return current values
+            return is_animated, parametric_iterative, dots_images, is_animated
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        # If is-animated-switch turned on, turn off the other two
+        if trigger_id == "is-animated-switch" and is_animated:
+            return True, False, False, True
+        # If parametric-iterative-switch turned on, turn off is-animated
+        if trigger_id == "parametric-iterative-switch" and parametric_iterative:
+            return False, True, dots_images, False
+        # If dots-images-switch turned on, turn off is-animated
+        if trigger_id == "dots-images-switch" and dots_images:
+            return False, parametric_iterative, True, False
+        # Otherwise, return current values
+        return is_animated, parametric_iterative, dots_images, is_animated
+
 
     @app.callback(
         Output('selected-image', 'src'),
@@ -450,24 +478,6 @@ def register_callbacks(app):
             return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], {'enabled': True}
         else:
             return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
-
-    # Callback to show/hide iterative slider based on generative mode
-    @app.callback(
-        Output('iteration-slider', 'className'),
-        Output('slider-play-btn', 'style'),
-        Input('generative-mode-state', 'data'),
-        prevent_initial_call=False
-    )
-    def toggle_iterative_slider(generative_state):
-        enabled = generative_state.get('enabled', False) if generative_state else False
-
-        if enabled:
-            # Hide the slider and play button when generative mode is on
-            return 'mb-3 d-none', {'display': 'none'}
-        else:
-            # Show the slider and play button when generative mode is off
-            return 'mb-3', {'display': 'block'}
-
 
     # Layer Buttons (Mutually Exclusive)
     @app.callback(
