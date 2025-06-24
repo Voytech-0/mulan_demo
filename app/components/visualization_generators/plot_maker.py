@@ -80,7 +80,7 @@ def create_datapoint_image(data_point, size=(20, 20)):
 
 
 def create_animated_figure(embedding, y, title, label_name):
-    n_frames = min(400, len(embedding))
+    n_frames = max(1, len(embedding))
     frames = []
     # Use y for all frames (assume y is static)
     point_indices = np.arange(len(y))
@@ -94,7 +94,7 @@ def create_animated_figure(embedding, y, title, label_name):
         'label': y.astype(str)
     })
     # Use a consistent color palette for both px.scatter and go.Scatter
-    color_palette = px.colors.qualitative.Light24
+    color_palette = px.colors.qualitative.Plotly
 
     # Compute global min/max for all frames for fixed axes
     all_x = np.concatenate([emb[:, 0] for emb in embedding[:n_frames]])
@@ -115,7 +115,7 @@ def create_animated_figure(embedding, y, title, label_name):
         range_y=y_range
     )
     # Build frames
-    for i in range(n_frames):
+    for i in range(0, n_frames, 10):
         dfi = pd.DataFrame({
             'x': embedding[i][:, 0],
             'y': embedding[i][:, 1],
@@ -155,7 +155,7 @@ def create_animated_figure(embedding, y, title, label_name):
                 ],
                 "label": str(k),
                 "method": "animate"
-            } for k in range(n_frames)
+            } for k in range(0, n_frames, 10)
         ],
         "transition": {"duration": 0},
         "x": 0.1,
@@ -216,6 +216,11 @@ def create_animated_figure(embedding, y, title, label_name):
 def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
     if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
         return px.scatter(title=f"{title} (no data)")
+
+    if 'trimap' in title.lower():
+        if show_images or is_thumbnail or n_added > 0:
+            embedding = embedding[-1]
+            print("Using last frame of TRIMAP embedding for visualization")
 
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
