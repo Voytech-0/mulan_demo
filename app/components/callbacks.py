@@ -11,7 +11,8 @@ from components.configs.settings import get_image_style, get_no_image_message_st
 from components.data_operations.dataset_api import get_dataset, dataset_shape
 from components.configs.feature_config import IMAGE_ONLY_DATASETS
 from components.slow_backend_operations.added_features_api import dynamically_add, generate_sample, extract_added_data
-from components.slow_backend_operations.embedding_calculation import compute_tsne, compute_umap, compute_trimap
+from components.slow_backend_operations.embedding_calculation import compute_tsne, compute_umap, compute_trimap, \
+    compute_all_embeddings
 from components.visualization_generators.layout_generators import create_metadata_display, create_coordinate_table, \
     create_metadata_table
 from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape
@@ -34,14 +35,6 @@ def register_callbacks(app):
         Output('main-graph-static', 'style'),
         Output('main-graph-animated', 'figure'),
         Output('main-graph-animated', 'style'),
-        Output('trimap-thumbnail', 'figure'),
-        Output('tsne-thumbnail', 'figure'),
-        Output('umap-thumbnail', 'figure'),
-        Output('metadata-display', 'children'),
-        Output('trimap-timing', 'children'),
-        Output('tsne-timing', 'children'),
-        Output('umap-timing', 'children'),
-        Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
         Input('dots-images-switch', 'value'),
         Input('focused-embedding', 'data'),
@@ -50,29 +43,15 @@ def register_callbacks(app):
         Input('parametric-iterative-switch', 'value'),
         Input('is-animated-switch', 'value'),
     )
-
-    def update_graphs(dataset_name, show_images, method,
-                      added_data_cache, distance, parametric, is_animated=False):
-        # Handle None value for show_images (default to False)
-        if show_images is None:
-            show_images = False
-
-        # Get the dataset
+    def update_main_figure(dataset_name, show_images, method,
+                           added_data_cache, distance, parametric, is_animated=False):
         X, y, data = get_dataset(dataset_name)
-
-        # Get embeddings for all methods
-        fwd_args = (dataset_name, distance)
-
-        trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric, export_iters=is_animated)
-        tsne_emb, tsne_time = compute_tsne(*fwd_args)
-        umap_emb, umap_time = compute_umap(*fwd_args)
-
-        # Get class names for legend
+        fwd_args = (dataset_name, distance, parametric)
+        (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args)
         class_names = getattr(data, 'target_names', None)
-
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
-            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args, parametric=parametric)
+            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args)
             X, y, trimap_emb = (np.concatenate([X, X_add], 0), np.concatenate([y, y_add], 0),
                                 np.concatenate([trimap_emb, trimap_emb_add], 0))
 
@@ -94,20 +73,56 @@ def register_callbacks(app):
             main_fig_static = {}
             main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class')
 
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, class_names=class_names, n_added=n_added)
-
-        metadata = create_metadata_display(dataset_name, data)
-
-        # Show/hide graphs based on is_animated
         if is_animated:
             static_style = {'display': 'none'}
             animated_style = {'display': 'block', 'height': '60vh'}
         else:
             static_style = {'display': 'block', 'height': '60vh'}
             animated_style = {'display': 'none'}
+        return main_fig_static, static_style, main_fig_animated, animated_style,
 
+    @app.callback(
+        Output('trimap-thumbnail', 'figure'),
+        Output('tsne-thumbnail', 'figure'),
+        Output('umap-thumbnail', 'figure'),
+        Input('dataset-dropdown', 'value'),
+        Input('dist-dropdown', 'value'),
+        Input('parametric-iterative-switch', 'value'),
+    )
+    def update_thumbnails(dataset_name, distance, parametric):
+        X, y, data = get_dataset(dataset_name)
+
+        fwd_args = (dataset_name, distance, parametric)
+        (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args)
+
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False)
+        return trimap_fig, tsne_fig, umap_fig
+
+    @app.callback(
+        Output('trimap-timing', 'children'),
+        Output('tsne-timing', 'children'),
+        Output('umap-timing', 'children'),
+        Input('dataset-dropdown', 'value'),
+        Input('dist-dropdown', 'value'),
+        Input('parametric-iterative-switch', 'value'),
+    )
+    def time_methods(dataset_name, distance, parametric):
+        _, (trimap_time, tsne_time, umap_time) = compute_all_embeddings(dataset_name, distance, parametric)
+        return (f"TRIMAP: {trimap_time:.2f}s",
+                f"t-SNE: {tsne_time:.2f}s",
+                f"UMAP: {umap_time:.2f}s")
+
+    @app.callback(
+        Output('metadata-display', 'children'),
+        Output('calculation-status', 'children'),
+        Input('dataset-dropdown', 'value'),
+        Input('focused-embedding', 'data'),
+    )
+    def update_metadata(dataset_name, method):
+        X, y, data = get_dataset(dataset_name)
+        metadata = create_metadata_display(dataset_name, data)
         ctx = callback_context
         calc_status = ""
         if not ctx.triggered:
@@ -120,24 +135,11 @@ def register_callbacks(app):
             calc_status = f"Loaded dataset {dataset_name}"
 
         # For thumbnail clicks
-        elif trigger_id in ['trimap-thumbnail-click', 'tsne-thumbnail-click', 'umap-thumbnail-click']:
-            method_name = trigger_id.replace('-thumbnail-click', '').upper()
-            calc_status = f"Calculated {method_name} embedding"
+        elif trigger_id == 'focused-embedding':
+            calc_status = f"Calculated {method} embedding"
 
-        return (
-            main_fig_static,
-            static_style,
-            main_fig_animated,
-            animated_style,
-            trimap_fig,
-            tsne_fig,
-            umap_fig,
-            metadata,
-            f"TRIMAP: {trimap_time:.2f}s",
-            f"t-SNE: {tsne_time:.2f}s",
-            f"UMAP: {umap_time:.2f}s",
-            calc_status
-        )
+        return metadata, calc_status
+
 
 
     # Mutually exclusive switches callback
@@ -539,7 +541,7 @@ def register_callbacks(app):
     )
     def submit_and_clear(n_clicks, json_data, added_data_cache, dataset_name):
         if not json_data:
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_updateInput
 
         canvas_shape = (500, 500)
         mask = parse_jsonstring(json_data, canvas_shape)

@@ -108,3 +108,11 @@ def compute_trimap_parametric(dataset_name):
 
 def compute_trimap_iterative(dataset_name, distance, export_iters):
     return _locked_function(_compute_trimap_iterative, dataset_name, distance, export_iters)
+
+def compute_all_embeddings(dataset_name, distance, parametric=False):
+    # Get embeddings for all methods
+    fwd_args = (dataset_name, distance)
+    trimap_emb, trimap_time = compute_trimap(*fwd_args, parametric=parametric)
+    tsne_emb, tsne_time = compute_tsne(*fwd_args)
+    umap_emb, umap_time = compute_umap(*fwd_args)
+    return (trimap_emb, tsne_emb, umap_emb), (trimap_time, tsne_time, umap_time)
