@@ -38,60 +38,27 @@ def register_callbacks(app):
         Output('tsne-thumbnail', 'figure'),
         Output('umap-thumbnail', 'figure'),
         Output('metadata-display', 'children'),
-        Output('embedding-cache', 'data'),
         Output('trimap-timing', 'children'),
         Output('tsne-timing', 'children'),
         Output('umap-timing', 'children'),
         Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
-        Input('recalculate-switch', 'value'),
         Input('dots-images-switch', 'value'),
-        Input('trimap-thumbnail-click', 'n_clicks'),
-        Input('tsne-thumbnail-click', 'n_clicks'),
-        Input('umap-thumbnail-click', 'n_clicks'),
-        State('embedding-cache', 'data'),
+        Input('focused-embedding', 'data'),
         Input('added-data-cache', 'data'),
         Input('dist-dropdown', 'value'),
         Input('parametric-iterative-switch', 'value'),
         Input('is-animated-switch', 'value'),
     )
 
-    def update_graphs(dataset_name, recalculate_flag, show_images, trimap_n_clicks, tsne_n_clicks, umap_n_clicks, cached_embeddings,
+    def update_graphs(dataset_name, show_images, method,
                       added_data_cache, distance, parametric, is_animated=False):
-        if not dataset_name:
-            fig = empty_fig()
-            return (
-                fig, {'display': 'block'},
-                {}, {'display': 'none'},
-                fig, fig, fig,
-                "", {}, "", "", ""
-            )
-
         # Handle None value for show_images (default to False)
         if show_images is None:
             show_images = False
 
         # Get the dataset
         X, y, data = get_dataset(dataset_name)
-
-        # Initialize embeddings dictionary if not exists
-        if cached_embeddings is None:
-            cached_embeddings = {}
-
-        # Determine which method was clicked
-        ctx = callback_context
-        if not ctx.triggered:
-            method = 'trimap'  # Default method
-        else:
-            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            if trigger_id == 'trimap-thumbnail-click':
-                method = 'trimap'
-            elif trigger_id == 'tsne-thumbnail-click':
-                method = 'tsne'
-            elif trigger_id == 'umap-thumbnail-click':
-                method = 'umap'
-            else:
-                method = 'trimap'  # Default method
 
         # Get embeddings for all methods
         fwd_args = (dataset_name, distance)
@@ -135,14 +102,6 @@ def register_callbacks(app):
 
         metadata = create_metadata_display(dataset_name, data)
 
-        # Update cache only if we have new embeddings
-        if recalculate_flag:
-            cached_embeddings[dataset_name] = {
-                'trimap': trimap_emb.tolist() if trimap_emb is not None else None,
-                'tsne': tsne_emb.tolist() if tsne_emb is not None else None,
-                'umap': umap_emb.tolist() if umap_emb is not None else None
-            }
-
         # Show/hide graphs based on is_animated
         if is_animated:
             static_style = {'display': 'none'}
@@ -162,10 +121,6 @@ def register_callbacks(app):
         if trigger_id == 'dataset-dropdown':
             calc_status = f"Loaded dataset {dataset_name}"
 
-        # For recalculation
-        elif trigger_id == 'recalculate-switch' and recalculate_flag:
-            calc_status = f"Recalculated embeddings for {dataset_name}"
-
         # For thumbnail clicks
         elif trigger_id in ['trimap-thumbnail-click', 'tsne-thumbnail-click', 'umap-thumbnail-click']:
             method_name = trigger_id.replace('-thumbnail-click', '').upper()
@@ -180,7 +135,6 @@ def register_callbacks(app):
             tsne_fig,
             umap_fig,
             metadata,
-            cached_embeddings,
             f"TRIMAP: {trimap_time:.2f}s",
             f"t-SNE: {tsne_time:.2f}s",
             f"UMAP: {umap_time:.2f}s",
@@ -495,33 +449,41 @@ def register_callbacks(app):
             classes[2] = 'control-button selected'
         return classes
 
+    @app.callback(
+        Output('focused-embedding', 'data'),
+        Input('tsne-thumbnail-click', 'n_clicks'),
+        Input('umap-thumbnail-click', 'n_clicks'),
+        Input('trimap-thumbnail-click', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def switch_focused_embedding(tsne_n_clicks, umap_n_clicks, trimap_n_clicks):
+        ctx = callback_context
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        button_id_2_focused_embedding = {
+            'tsne-thumbnail-click': 'tsne',
+            'umap-thumbnail-click': 'umap',
+            'trimap-thumbnail-click': 'trimap'
+        }
+        return button_id_2_focused_embedding[button_id]
+
     # Method Buttons (Mutually Exclusive)
     @app.callback(
         Output('tsne-thumbnail-click', 'className'),
         Output('umap-thumbnail-click', 'className'),
         Output('trimap-thumbnail-click', 'className'),
-        Input('tsne-thumbnail-click', 'n_clicks'),
-        Input('umap-thumbnail-click', 'n_clicks'),
-        Input('trimap-thumbnail-click', 'n_clicks'),
+        Input('focused-embedding', 'data'),
         prevent_initial_call=True
     )
-    def select_method_button(tsne_n_clicks, umap_n_clicks, trimap_n_clicks):
-        ctx = callback_context
-        if not ctx.triggered:
-            # Default state, TRIMAP is initially selected
-            return "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3", "method-button-container thumbnail-button mb-3 selected"
-
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
+    def select_method_button(focused_embedding):
         tsne_class = "method-button-container thumbnail-button mb-3"
         umap_class = "method-button-container thumbnail-button mb-3"
         trimap_class = "method-button-container thumbnail-button mb-3"
 
-        if button_id == 'tsne-thumbnail-click':
+        if focused_embedding == 'tsne':
             tsne_class = "method-button-container thumbnail-button mb-3 selected"
-        elif button_id == 'umap-thumbnail-click':
+        elif focused_embedding == 'umap':
             umap_class = "method-button-container thumbnail-button mb-3 selected"
-        elif button_id == 'trimap-thumbnail-click':
+        elif focused_embedding == 'trimap':
             trimap_class = "method-button-container thumbnail-button mb-3 selected"
 
         return tsne_class, umap_class, trimap_class

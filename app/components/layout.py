@@ -15,6 +15,7 @@ def create_layout(app):
         dcc.Store(id='trimap-wrapper-file', data=''),
         dcc.Store(id='full-grid-visible', data=False),
         dcc.Store(id='last-clicked-point', data=None),
+        dcc.Store(id='focused-embedding', data='trimap'),
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
