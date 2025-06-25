@@ -73,7 +73,7 @@ def register_visualization_callbacks(app):
         Input('main-graph-static', 'clickData'),
         Input('generative-mode-state', 'data'),
         Input('dataset-dropdown', 'value'),
-        Input('full-grid-btn', 'n_clicks'),
+        Input('grid-btn', 'n_clicks'),
         Input('upload-new-datapoint-btn', 'n_clicks'),
         State('dataset-dropdown', 'value'),
         State('main-graph-static', 'figure'),
@@ -97,7 +97,7 @@ def register_visualization_callbacks(app):
         metadata_message = "No metadata to show in this dataset" if is_image_dataset else "Click on a point in the graph to show metadata"
 
         # Handle full grid toggle
-        if triggered == "full-grid-btn":
+        if triggered == "grid-btn":
             is_opening = not full_grid_visible
 
             # When opening grid: hide all metadata/image blocks

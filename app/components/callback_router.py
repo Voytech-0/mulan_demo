@@ -59,7 +59,7 @@ def register_callbacks(app):
 
     @app.callback(
         Output("full-grid-container", "children"),
-        Input("full-grid-btn", "n_clicks"),
+        Input("grid-btn", "n_clicks"),
         State("dataset-dropdown", "value"),
         prevent_initial_call=True
     )

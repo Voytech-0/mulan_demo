@@ -20,15 +20,6 @@ def create_layout(app):
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
-                # Full Grid Button
-                dbc.Row([
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-th-large me-2"), "Full Grid"],
-                        id="full-grid-btn",
-                        color="secondary",
-                        className="control-button"
-                    ), width="auto")
-                ], className="mb-3"),
                 html.Div(
                     id="full-grid-container",
                     children=[],  # Filled by another callback below
@@ -77,7 +68,7 @@ def create_layout(app):
                         DashCanvas(
                             id='canvas',
                             width=500,
-                            height=50000,
+                            height=5000,
                             lineWidth=50,
                             lineColor='black',
                             hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',
@@ -186,15 +177,6 @@ def create_layout(app):
                                 ),
                                 width=2
                             )
-                        ], align="center", justify="start", className="mb-3"),
-                        dbc.Row([
-                            dbc.Col(html.P("Use Saved", className="mb-0 me-2 text-white"), width=5),
-                            dbc.Col(dbc.Switch(
-                                id="recalculate-switch",
-                                value=False,
-                                className="me-2"
-                            ), width=2),
-                            dbc.Col(html.P("Recalculate", className="mb-0 text-white text-align-right"), width=5),
                         ], align="center", justify="start", className="mb-3"),
                         dbc.Row([
                             dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width=5),
