@@ -43,7 +43,6 @@ def register_main_figure_callbacks(app):
                 trimap_emb if method == 'trimap' else tsne_emb if method == 'tsne' else umap_emb,
                 y,
                 f"{method.upper()} Embedding of {dataset_name}",
-                "Class",
                 X,
                 show_images=show_images,
                 class_names=class_names,
@@ -77,9 +76,9 @@ def register_main_figure_callbacks(app):
         fwd_args = (dataset_name, distance, parametric)
         (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args)
 
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
+        umap_fig = create_figure(umap_emb, y, "UMAP", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
         return trimap_fig, tsne_fig, umap_fig
 
     @app.callback(

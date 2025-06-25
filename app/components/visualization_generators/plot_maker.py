@@ -7,7 +7,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape
+from components.configs.feature_config import IMAGE_ONLY_DATASETS
+from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape, create_main_fig_dataframe
+
 
 def empty_fig(title='No dataset selected'):
     return px.scatter(title=title)
@@ -34,7 +36,7 @@ def invisible_interactable_layer(x_min, x_max, y_min, y_max):
     return layer
 
 
-def add_new_data_to_fig(fig, df, color_map):
+def add_new_data_to_fig(fig, df):
     for label in df['label'].unique():
         df_subset = df[df['label'] == label]
         fig.add_trace(go.Scatter(
@@ -44,7 +46,7 @@ def add_new_data_to_fig(fig, df, color_map):
             marker=dict(
                 symbol='circle' if int(label) == -1 else 'x',
                 size=40 if int(label) == -1 else 20,
-                color=color_map[label],
+                color=df_subset['color'],
                 line=dict(width=2, color='black')
             ),
             name=f'Additional: {label}',
@@ -57,33 +59,11 @@ _image_cache = {}
 
 
 def create_datapoint_image(data_point, size=(20, 20)):
-    cache_key = (hash(data_point.tobytes()), size)
-    if cache_key in _image_cache:
-        return _image_cache[cache_key]
     normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
     side_length = int(np.sqrt(len(normalized)))
-    if side_length * side_length == len(normalized):
-        img_data = normalized.reshape(side_length, side_length)
-        cmap = 'gray'
-        fig_size = (size[0]/50, size[1]/50) if side_length == 8 else (size[0]/25, size[1]/25)
-    else:
-        img_data = normalized.reshape(-1, 8)
-        cmap = 'viridis'
-        fig_size = (size[0]/100, size[1]/100)
-    plt.figure(figsize=fig_size, dpi=300)
-    plt.imshow(img_data, cmap=cmap, interpolation='nearest')
-    plt.axis('off')
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
-    plt.close()
-    buf.seek(0)
-    img_str = base64.b64encode(buf.read()).decode()
+    img_data = normalized.reshape(side_length, side_length)
+    img_str = encode_img_as_str(img_data, size)
     img_data_url = f"data:image/png;base64,{img_str}"
-    _image_cache[cache_key] = img_data_url
-    if len(_image_cache) > 1000:
-        oldest_keys = list(_image_cache.keys())[:100]
-        for key in oldest_keys:
-            del _image_cache[key]
     return img_data_url
 
 
@@ -199,14 +179,6 @@ def create_animated_figure(embedding, y, title, label_name):
                     "method": "animate"
                 },
                 {
-                    "args": [
-                        [None],
-                        {
-                            "frame": {"duration": 0, "redraw": True},
-                            "mode": "immediate",
-                            "transition": {"duration": 0}
-                        }
-                    ],
                     "label": "Pause",
                     "method": "animate",
                     "args": [
@@ -232,149 +204,81 @@ def create_animated_figure(embedding, y, title, label_name):
     )
     return fig
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None):
-    try:
-        if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
-            return px.scatter(title=f"{title} (no data)")
-    except TypeError:
-        return px.scatter(title=f"{title} (no data)")
+def figure_with_images(df, X, title, category_orders):
+    max_images = 100
+    if len(X) > max_images:
+        step = len(X) // max_images
+        indices_to_show = list(range(0, len(X), step))[:max_images]
+        print(
+            f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show) / len(df) * 100:.1f}%)")
+    else:
+        indices_to_show = list(range(len(X)))
+        print(f"Showing all {len(indices_to_show)} images")
+    images = []
+    for i in indices_to_show:
+        img_str = create_datapoint_image(X[i], size=(15, 15))
+        images.append(img_str)
+    fig = px.scatter(
+        df,
+        x='x',
+        y='y',
+        color='label',
+        custom_data=['point_index', 'label'],
+        title=title,
+        labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
+        category_orders=category_orders
+    )
 
-    if len(embedding.shape)==3:
+    # hover_texts = []
+    # for i in df['point_index']:
+    #     img_str = create_datapoint_image(X[i], size=(30, 30))
+    #     hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
+    #     hover_texts.append(hover_html)
+
+    fig.update_traces(
+        marker=dict(
+            size=15,
+            sizeref=1,
+            sizemin=5,
+            sizemode='diameter'
+        ),
+        hoverinfo="text",
+        hovertemplate=None,
+        # text=hover_texts,
+        selector=dict(type='scatter')
+    )
+    for i, img_str in enumerate(images):
+        x, y = df.iloc[indices_to_show[i]]['x'], df.iloc[indices_to_show[i]]['y']
+        x_range = df['x'].max() - df['x'].min()
+        y_range = df['y'].max() - df['y'].min()
+        base_size = max(x_range, y_range) * 0.04
+        fig.add_layout_image(
+            dict(
+                source=img_str,
+                xref="x",
+                yref="y",
+                x=x,
+                y=y,
+                sizex=base_size,
+                sizey=base_size,
+                xanchor="center",
+                yanchor="middle"
+            )
+        )
+    return fig
+
+def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None):
+    if len(embedding.shape) == 3:
         embedding = embedding[-1]
         print("Using last frame of TRIMAP embedding for visualization")
 
-    is_contiunuous = len(np.unique(y)) > 20
-    # Create a list of customdata for each point, including the point index
-    point_indices = np.arange(len(y))
-
-    # If class_names is not provided, use unique values in y as strings
-    if class_names is None:
-        unique_classes = np.unique(y)
-        class_names = [str(c) for c in unique_classes]
-
-    # Map y to class names for legend
-    y_int = y.astype(int)
-    color_seq = px.colors.qualitative.Plotly
-    if not is_contiunuous:
-        y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-
-        unique_labels = pd.Series(y_labels).unique()
-        color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
-    n_original = len(y) - n_added
-    sections = [slice(0, n_original)]
-
-    visualize_added_samples = n_added > 0 and embedding.shape[0] == X.shape[0]
-    if visualize_added_samples:
-        sections.append(slice(n_original, None))
-
-    data_frames = []
-    if not is_contiunuous:
-        for section in sections:
-            df = pd.DataFrame({
-                'x': embedding[section, 0],
-                'y': embedding[section, 1],
-                'point_index': point_indices[section],
-                'label': y_labels[section]
-            })
-            df['color'] = df['label'].map(color_map)
-            data_frames.append(df)
-    else:
-        for section in sections:
-            df = pd.DataFrame({
-                'x': embedding[section, 0],
-                'y': embedding[section, 1],
-                'point_index': point_indices[section],
-                'label': y[section]
-            })
-            df['color'] = df['label']
-            data_frames.append(df)
-
-    # Set category order for consistent color mapping
+    data_frames = create_main_fig_dataframe(embedding, X, y, class_names, n_added)
     category_orders = {'color': class_names}
 
     # Check if we should show images and if we have image data
     df = data_frames[0]
-    if show_images and X is not None and len(X) > 0:
-        if len(X[0]) in [64, 784]:
-            max_images = 100
-            if len(X) > max_images:
-                step = len(X) // max_images
-                indices_to_show = list(range(0, len(X), step))[:max_images]
-                print(f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show)/len(X)*100:.1f}%)")
-            else:
-                indices_to_show = list(range(len(X)))
-                print(f"Showing all {len(indices_to_show)} images")
-            images = []
-            for i in indices_to_show:
-                img_str = create_datapoint_image(X[i], size=(15, 15))
-                images.append(img_str)
-            fig = px.scatter(
-                df,
-                x='x',
-                y='y',
-                color='label',
-                custom_data=['point_index', 'label'],
-                title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-                category_orders=category_orders
-            )
-            fig.update_traces(
-                marker=dict(
-                    size=15,
-                    sizeref=1,
-                    sizemin=5,
-                    sizemode='diameter'
-                ),
-                selector=dict(type='scatter')
-            )
-            if show_images and X is not None:
-                hover_texts = []
-                for i in df['point_index']:
-                    img_str = create_datapoint_image(X[i], size=(30, 30))
-                    hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
-                    hover_texts.append(hover_html)
-
-            fig.update_traces(
-                marker=dict(
-                    size=15,
-                    sizeref=1,
-                    sizemin=5,
-                    sizemode='diameter'
-                ),
-                hoverinfo="text",
-                hovertemplate=None,
-                text=hover_texts,
-                selector=dict(type='scatter')
-            )
-            for i, img_str in enumerate(images):
-                x, y = df.iloc[indices_to_show[i]]['x'], df.iloc[indices_to_show[i]]['y']
-                x_range = df['x'].max() - df['x'].min()
-                y_range = df['y'].max() - df['y'].min()
-                base_size = max(x_range, y_range) * 0.04
-                fig.add_layout_image(
-                    dict(
-                        source=img_str,
-                        xref="x",
-                        yref="y",
-                        x=x,
-                        y=y,
-                        sizex=base_size,
-                        sizey=base_size,
-                        xanchor="center",
-                        yanchor="middle"
-                    )
-                )
-        else:
-            fig = px.scatter(
-                df,
-                x='x',
-                y='y',
-                color='label',
-                custom_data=['point_index', 'label'],
-                title=title,
-                labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-                category_orders=category_orders
-            )
+    if show_images and dataset_name in IMAGE_ONLY_DATASETS:
+        fig = figure_with_images(df, X, title, category_orders)
     else:
         fig = px.scatter(
             df,
@@ -388,8 +292,8 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         )
 
     # Additional points
-    if visualize_added_samples:
-        add_new_data_to_fig(fig, data_frames[1], color_map)
+    if n_added > 0 and embedding.shape[0] != X.shape[0]:
+        add_new_data_to_fig(fig, data_frames[1])
 
     if is_thumbnail:
         fig.update_layout(
@@ -405,6 +309,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         fig.update_layout(
             margin=dict(l=5, r=5, t=50, b=5)
         )
+    print('finished creating figure')
     return fig
 
 def create_data_distribution_plot(data):

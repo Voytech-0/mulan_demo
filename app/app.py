@@ -27,8 +27,9 @@ app.config.suppress_callback_exceptions = True
 
 
 # Set up layout and callbacks
-app.layout = create_layout(app)
+
 cache.init_app(app.server)
+app.layout = create_layout(app)
 
 register_callbacks(app)
 
