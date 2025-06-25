@@ -268,7 +268,7 @@ def figure_with_images(df, X, title, category_orders):
     return fig
 
 def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None):
-    if len(embedding.shape) == 3:
+    if embedding is not None and hasattr(embedding, 'shape') and len(embedding.shape) == 3:
         embedding = embedding[-1]
         print("Using last frame of TRIMAP embedding for visualization")
 
@@ -292,7 +292,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
         )
 
     # Additional points
-    if n_added > 0 and embedding.shape[0] != X.shape[0]:
+    if n_added > 0 and embedding is not None and X is not None and embedding.shape[0] != X.shape[0]:
         add_new_data_to_fig(fig, data_frames[1])
 
     if is_thumbnail:
@@ -361,13 +361,36 @@ def create_data_distribution_plot(data, class_names=None, color_map=None):
     )
     return fig
 
-def create_3d_plot(X, y, title, class_names=None):
-    df = pd.DataFrame(X[:, :3], columns=['x', 'y', 'z'])
-    df['label'] = y
-    if class_names is not None and y.dtype.kind != 'f':
-        df['label'] = df['label'].astype(int).apply(lambda i: class_names[i])
+def create_3d_plot(X, y, title, class_names=None, color_map=None, is_continuous=None):
+    import pandas as pd
+    import numpy as np
+    import plotly.express as px
 
-    fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
+    # Determine if the dataset should be continuous or categorical
+    if is_continuous is None:
+        is_continuous = len(np.unique(y)) > 20
+
+    df = pd.DataFrame(X[:, :3], columns=['x', 'y', 'z'])
+    if is_continuous:
+        df['label'] = y
+        fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
+    else:
+        # Only map to class_names if they exist and are valid for all labels
+        if class_names and len(class_names) > 0:
+            try:
+                if all(0 <= int(i) < len(class_names) for i in y):
+                    df['label'] = [str(class_names[int(i)]) for i in y]
+                else:
+                    df['label'] = [str(i) for i in y]
+            except Exception:
+                df['label'] = [str(i) for i in y]
+        else:
+            df['label'] = [str(i) for i in y]
+        if color_map is not None:
+            fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title, color_discrete_map=color_map)
+        else:
+            fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
+
     fig.update_layout(
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
