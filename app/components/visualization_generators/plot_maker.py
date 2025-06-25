@@ -1,14 +1,11 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import io
-import base64
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 from components.configs.feature_config import IMAGE_ONLY_DATASETS
-from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape, create_main_fig_dataframe, create_color_map
+from components.visualization_generators.plot_helpers import encode_img_as_str, create_main_fig_dataframe, \
+    create_color_map
 
 
 def empty_fig(title='No dataset selected'):
@@ -100,8 +97,12 @@ def figure_with_images(df, X, title, category_orders):
         )
     return fig
 
-def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None, **kwargs):
-    if embedding is not None and hasattr(embedding, 'shape') and len(embedding.shape) == 3:
+def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None,
+                  interactive_figure=False, **kwargs):
+    if embedding is None:
+        return empty_fig('Not available')
+
+    if hasattr(embedding, 'shape') and len(embedding.shape) == 3:
         embedding = embedding[-1]
     data_frames = create_main_fig_dataframe(embedding, X, y, class_names, n_added)
     df = data_frames[0]
@@ -133,11 +134,13 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
             hovermode=False
         )
     else:
-        fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
+        if interactive_figure:
+            print('adding interactive figure')
+            fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
         fig.update_layout(margin=dict(l=5, r=5, t=50, b=5))
     return fig
 
-def create_animated_figure(embedding, y, title, label_name, class_names=None, n_added=0, X=None):
+def create_animated_figure(embedding, y, title, class_names=None, n_added=0, X=None):
     is_continuous = len(np.unique(y)) > 20
     n_frames = max(1, len(embedding))
     color_map = create_color_map(y)
@@ -225,121 +228,6 @@ def create_animated_figure(embedding, y, title, label_name, class_names=None, n_
         sliders=sliders,
         margin=dict(l=5, r=5, t=50, b=5)
     )
-    return fig
-
-def figure_with_images(df, X, title, category_orders):
-    max_images = 100
-    if len(X) > max_images:
-        step = len(X) // max_images
-        indices_to_show = list(range(0, len(X), step))[:max_images]
-        print(
-            f"Showing {len(indices_to_show)} images out of {len(X)} total points ({len(indices_to_show) / len(df) * 100:.1f}%)")
-    else:
-        indices_to_show = list(range(len(X)))
-        print(f"Showing all {len(indices_to_show)} images")
-    images = []
-    for i in indices_to_show:
-        img_str = create_datapoint_image(X[i], size=(15, 15))
-        images.append(img_str)
-    fig = px.scatter(
-        df,
-        x='x',
-        y='y',
-        color='label',
-        custom_data=['point_index', 'label'],
-        title=title,
-        labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-        category_orders=category_orders
-    )
-
-    # hover_texts = []
-    # for i in df['point_index']:
-    #     img_str = create_datapoint_image(X[i], size=(30, 30))
-    #     hover_html = f"<img src='{img_str}' width='50' height='50'><br>Class: {df.iloc[i]['label']}"
-    #     hover_texts.append(hover_html)
-
-    fig.update_traces(
-        marker=dict(
-            size=15,
-            sizeref=1,
-            sizemin=5,
-            sizemode='diameter'
-        ),
-        hoverinfo="text",
-        hovertemplate=None,
-        # text=hover_texts,
-        selector=dict(type='scatter')
-    )
-    for i, img_str in enumerate(images):
-        x, y = df.iloc[indices_to_show[i]]['x'], df.iloc[indices_to_show[i]]['y']
-        x_range = df['x'].max() - df['x'].min()
-        y_range = df['y'].max() - df['y'].min()
-        base_size = max(x_range, y_range) * 0.04
-        fig.add_layout_image(
-            dict(
-                source=img_str,
-                xref="x",
-                yref="y",
-                x=x,
-                y=y,
-                sizex=base_size,
-                sizey=base_size,
-                xanchor="center",
-                yanchor="middle"
-            )
-        )
-    return fig
-
-def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0,
-                  dataset_name=None, interactive_figure=False):
-    if embedding is None:
-        return empty_fig('Not available')
-
-
-    if hasattr(embedding, 'shape') and len(embedding.shape) == 3:
-        embedding = embedding[-1]
-        print("Using last frame of TRIMAP embedding for visualization")
-
-    data_frames = create_main_fig_dataframe(embedding, X, y, class_names, n_added)
-    category_orders = {'color': class_names}
-
-    # Check if we should show images and if we have image data
-    df = data_frames[0]
-    if show_images and dataset_name in IMAGE_ONLY_DATASETS:
-        fig = figure_with_images(df, X, title, category_orders)
-    else:
-        fig = px.scatter(
-            df,
-            x='x',
-            y='y',
-            color='label',
-            custom_data=['point_index', 'label'],
-            title=title,
-            labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-            category_orders=category_orders
-        )
-
-    # Additional points
-    if n_added > 0 and embedding.shape[0] == X.shape[0]:
-        add_new_data_to_fig(fig, data_frames[1])
-
-    if is_thumbnail:
-        fig.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(showticklabels=False, visible=False),
-            yaxis=dict(showticklabels=False, visible=False),
-            showlegend=False,
-            hovermode=False
-        )
-    else:
-        if interactive_figure:
-            print('adding interactive figure')
-            df = data_frames[0]
-            fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
-        fig.update_layout(
-            margin=dict(l=5, r=5, t=50, b=5)
-        )
-    print('finished creating figure')
     return fig
 
 def create_data_distribution_plot(data, class_names=None, color_map=None):
