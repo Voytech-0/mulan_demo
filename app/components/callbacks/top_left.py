@@ -34,7 +34,7 @@ def register_visualization_callbacks(app):
         State('dist-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def display_datum_as_image(clickData, generative_state, dataset_name, parametric, distance):
+    def display_datum_as_image(clickData, enabled, dataset_name, parametric, distance):
         invalid = not clickData or not dataset_name in IMAGE_ONLY_DATASETS
         image_message = "Click on a point in the graph to display image" if dataset_name in IMAGE_ONLY_DATASETS else\
             "No image to display for this dataset"
@@ -49,7 +49,6 @@ def register_visualization_callbacks(app):
 
         x_coord, y_coord = _extract_coords(clickData)
 
-        enabled = generative_state.get('enabled', False) if generative_state else False
         if enabled:
             sample = generate_sample(x_coord, y_coord, dataset_name, distance, parametric=parametric)
             sample = match_shape(sample, dataset_name)
@@ -59,8 +58,7 @@ def register_visualization_callbacks(app):
                 f'data:image/png;base64,{img_str}',
                 get_image_style('block'),  # selected-image style
                 get_no_image_message_style('block'),  # no-image-message style
-                html.Div("No image to display for this dataset", style={'text-align': 'center', 'color': '#999'}),
-            )
+                "")
 
         # defensive -> check if point data in custom data
         point_data = clickData['points'][0]
@@ -90,13 +88,12 @@ def register_visualization_callbacks(app):
         Input('dataset-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def display_metadata(click_data, generative_state, dataset_name):
+    def display_metadata(click_data, enabled, dataset_name):
         invalid = not click_data or dataset_name in IMAGE_ONLY_DATASETS
 
         metadata_message = "No metadata to show in this dataset" if dataset_name in IMAGE_ONLY_DATASETS else\
             "Click on a point in the graph to show metadata"
 
-        enabled = generative_state.get('enabled', False) if generative_state else False
         display_style = 'block' if not enabled else 'none'
 
         if invalid:
@@ -136,7 +133,7 @@ def register_visualization_callbacks(app):
         Input('dataset-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def display_coordinates(clickData, generative_state, dataset_name):
+    def display_coordinates(clickData, enabled, dataset_name):
         invalid = not clickData or not dataset_name in IMAGE_ONLY_DATASETS
 
         if invalid:
@@ -147,7 +144,16 @@ def register_visualization_callbacks(app):
             )
 
         x_coord, y_coord = _extract_coords(clickData)
+
         point_data = clickData['points'][0]
+        if enabled:
+            point_index =  'NA'
+            class_label = 'NA'
+            digit_label = 'NA'
+            coordinates_table = create_coordinate_table(x_coord, y_coord, point_index, class_label, digit_label)
+            return coordinates_table, {'marginTop': '2rem'}
+
+
         if 'customdata' in point_data:
             point_index = int(point_data['customdata'][0])
             digit_label = point_data['customdata'][1]

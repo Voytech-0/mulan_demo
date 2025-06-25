@@ -24,10 +24,11 @@ def register_main_figure_callbacks(app):
         Input('added-data-cache', 'data'),
         Input('dist-dropdown', 'value'),
         Input('parametric-iterative-switch', 'value'),
+        Input('generative-mode-state', 'data'),
         Input('is-animated-switch', 'value'),
     )
     def update_main_figure(dataset_name, show_images, method,
-                           added_data_cache, distance, parametric, is_animated=False):
+                           added_data_cache, distance, parametric, enabled, is_animated=False):
         X, y, data = get_dataset(dataset_name)
         fwd_args = (dataset_name, distance, parametric)
         (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args, is_animated=is_animated)
@@ -51,7 +52,8 @@ def register_main_figure_callbacks(app):
                 show_images=show_images,
                 class_names=class_names,
                 n_added=n_added,
-                dataset_name=dataset_name
+                dataset_name=dataset_name,
+                interactive_figure=enabled
             )
             main_fig_animated = {}
         else:

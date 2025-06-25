@@ -41,15 +41,15 @@ def register_sliders(app):
     )
     def toggle_generative_mode(n_clicks, current_state):
         if n_clicks is None:
-            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], False
 
         # Toggle the state
-        new_enabled = not current_state.get('enabled', False)
+        new_enabled = not current_state
 
         if new_enabled:
-            return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], {'enabled': True}
+            return 'success', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode (ON)"], True
         else:
-            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], {'enabled': False}
+            return 'secondary', [html.I(className="fas fa-lightbulb me-2"), "Generative Mode"], False
 
     # Layer Buttons (Mutually Exclusive)
     @app.callback(
@@ -146,5 +146,11 @@ def register_sliders(app):
 
         return [], None
 
-
-
+    @app.callback(
+        Output('added-data-cache', 'data'),
+        Input('dataset-dropdown', 'value'),
+        State('added-data-cache', 'data'),
+        prevent_initial_call=True
+    )
+    def clear_added_data_cache(cache, dataset):
+        return cache

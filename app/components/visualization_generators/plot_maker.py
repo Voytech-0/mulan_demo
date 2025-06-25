@@ -263,7 +263,8 @@ def figure_with_images(df, X, title, category_orders):
         )
     return fig
 
-def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None):
+def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0,
+                  dataset_name=None, interactive_figure=False):
     if embedding is not None and hasattr(embedding, 'shape') and len(embedding.shape) == 3:
         embedding = embedding[-1]
         print("Using last frame of TRIMAP embedding for visualization")
@@ -300,8 +301,10 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
             hovermode=False
         )
     else:
-        df = data_frames[0]
-        fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
+        if interactive_figure:
+            print('adding interactive figure')
+            df = data_frames[0]
+            fig.add_trace(invisible_interactable_layer(df['x'].min(), df['x'].max(), df['y'].min(), df['y'].max()))
         fig.update_layout(
             margin=dict(l=5, r=5, t=50, b=5)
         )
