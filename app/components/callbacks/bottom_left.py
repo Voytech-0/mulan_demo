@@ -132,6 +132,15 @@ def register_sliders(app):
             ]
             return options, "PACS - Photo"
 
+        elif family == "testing":
+            options = [
+                {"label": "S-curve", "value": "Testing - S-curve"},
+                {"label": "Swiss Roll", "value": "Testing - Swiss Roll"},
+                {"label": "Mammoth", "value": "Testing - Mammoth"},
+
+            ]
+            return options, "Testing - S-curve"
+
         elif family == "custom_upload":
             return [{"label": "Upload Custom Dataset", "value": "custom_upload"}], "custom_upload"
 

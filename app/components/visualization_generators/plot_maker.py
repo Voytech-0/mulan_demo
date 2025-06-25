@@ -88,19 +88,30 @@ def create_datapoint_image(data_point, size=(20, 20)):
 
 
 def create_animated_figure(embedding, y, title, label_name):
+    is_contiunuous = len(np.unique(y)) > 20
     n_frames = max(1, len(embedding))
     frames = []
     # Use y for all frames (assume y is static)
     point_indices = np.arange(len(y))
     # Initial frame
-    df0 = pd.DataFrame({
-        'x': embedding[0][:, 0],
-        'y': embedding[0][:, 1],
-        'color': y.astype(str),
-        'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
-        'point_index': point_indices,
-        'label': y.astype(str)
-    })
+    if not is_contiunuous:
+        df0 = pd.DataFrame({
+            'x': embedding[0][:, 0],
+            'y': embedding[0][:, 1],
+            'color': y.astype(str),
+            'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+            'point_index': point_indices,
+            'label': y.astype(str)
+        })
+    else:
+        df0 = pd.DataFrame({
+            'x': embedding[0][:, 0],
+            'y': embedding[0][:, 1],
+            'color': y,
+            'color_num': y if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
+            'point_index': point_indices,
+            'label': y.astype(str)
+        })
     # Use a consistent color palette for both px.scatter and go.Scatter
     color_palette = px.colors.qualitative.Plotly
 
@@ -232,6 +243,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         embedding = embedding[-1]
         print("Using last frame of TRIMAP embedding for visualization")
 
+    is_contiunuous = len(np.unique(y)) > 20
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
 
@@ -242,11 +254,12 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
 
     # Map y to class names for legend
     y_int = y.astype(int)
-    y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-
-    unique_labels = pd.Series(y_labels).unique()
     color_seq = px.colors.qualitative.Plotly
-    color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
+    if not is_contiunuous:
+        y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
+
+        unique_labels = pd.Series(y_labels).unique()
+        color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
     n_original = len(y) - n_added
     sections = [slice(0, n_original)]
 
@@ -255,15 +268,26 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
         sections.append(slice(n_original, None))
 
     data_frames = []
-    for section in sections:
-        df = pd.DataFrame({
-            'x': embedding[section, 0],
-            'y': embedding[section, 1],
-            'point_index': point_indices[section],
-            'label': y_labels[section]
-        })
-        df['color'] = df['label'].map(color_map)
-        data_frames.append(df)
+    if not is_contiunuous:
+        for section in sections:
+            df = pd.DataFrame({
+                'x': embedding[section, 0],
+                'y': embedding[section, 1],
+                'point_index': point_indices[section],
+                'label': y_labels[section]
+            })
+            df['color'] = df['label'].map(color_map)
+            data_frames.append(df)
+    else:
+        for section in sections:
+            df = pd.DataFrame({
+                'x': embedding[section, 0],
+                'y': embedding[section, 1],
+                'point_index': point_indices[section],
+                'label': y[section]
+            })
+            df['color'] = df['label']
+            data_frames.append(df)
 
     # Set category order for consistent color mapping
     category_orders = {'color': class_names}
