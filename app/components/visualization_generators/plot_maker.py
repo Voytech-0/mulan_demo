@@ -215,13 +215,15 @@ def create_animated_figure(embedding, y, title, label_name):
     return fig
 
 def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
-    if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
+    try:
+        if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
+            return px.scatter(title=f"{title} (no data)")
+    except TypeError:
         return px.scatter(title=f"{title} (no data)")
 
-    if 'trimap' in title.lower():
-        if show_images or is_thumbnail or n_added > 0:
-            # embedding = embedding[-1]
-            print("Using last frame of TRIMAP embedding for visualization")
+    if len(embedding.shape)==3:
+        embedding = embedding[-1]
+        print("Using last frame of TRIMAP embedding for visualization")
 
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
