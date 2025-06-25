@@ -15,7 +15,7 @@ from sklearn.datasets import make_s_curve, make_swiss_roll
 
 def load_PACS(domain='photo'):
     """Load PACS dataset."""
-    data_path = '../../data/pacs_data'
+    data_path = os.path.join(os.path.dirname(__file__), '../../data/pacs_data')
     if not os.path.exists(data_path):
         raise Exception(f'PACS dataset not found in folder {data_path}.')
 
@@ -109,8 +109,8 @@ def load_testing_swiss_roll(n_samples=1000, noise=0.00):
 
 def load_testing_mammoth():
     # load from data/mammoth_umap.json
-    # with open('../../data/mammoth_umap.json', 'r') as f:
-    with open('data/mammoth_umap.json', 'r') as f:
+    data_path = os.path.join(os.path.dirname(__file__), '../../data/mammoth_umap.json')
+    with open(data_path, 'r') as f:
         data = json.load(f)
     X = np.array(data['3d'], dtype=np.float32)
     y = np.array(data['labels'], dtype=np.int32)
@@ -148,7 +148,7 @@ numba_global_lock = threading.Lock()
 
 def get_dataset(name):
     with numba_global_lock:
-        if name is 'custom_upload':
+        if name == 'custom_upload':
             # Return a placeholder dataset for custom upload
             # This will be handled by the upload functionality later
             X = np.random.rand(10, 4)  # Placeholder data
