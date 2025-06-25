@@ -149,8 +149,7 @@ def register_sliders(app):
     @app.callback(
         Output('added-data-cache', 'data'),
         Input('dataset-dropdown', 'value'),
-        State('added-data-cache', 'data'),
         prevent_initial_call=True
     )
-    def clear_added_data_cache(cache, dataset):
-        return cache
+    def clear_added_data_cache(dataset):
+        return {}

@@ -316,7 +316,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
         )
 
     # Additional points
-    if n_added > 0 and embedding is not None and X is not None and embedding.shape[0] != X.shape[0]:
+    if n_added > 0 and embedding.shape[0] == X.shape[0]:
         add_new_data_to_fig(fig, data_frames[1])
 
     if is_thumbnail:
