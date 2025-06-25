@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from components.configs.feature_config import IMAGE_ONLY_DATASETS
-from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape, create_main_fig_dataframe
+from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape, create_main_fig_dataframe, create_color_map
 
 
 def empty_fig(title='No dataset selected'):
@@ -122,7 +122,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
             color_discrete_map=color_map,
             **kwargs
         )
-    if n_added > 0 and embedding is not None and X is not None and embedding.shape[0] != X.shape[0]:
+    if n_added > 0 and embedding.shape[0] == X.shape[0]:
         add_new_data_to_fig(fig, data_frames[1])
     if is_thumbnail:
         fig.update_layout(
