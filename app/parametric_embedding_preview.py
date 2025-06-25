@@ -29,7 +29,7 @@ for dataset_name in image_datasets:
     # Train classifier if not already trained
     if not USE_SAVED_CKPT:
         print("Training classifier (if needed)...")
-        train_classifier(X, y, dataset_name, num_epochs=3, batch_size=4, learning_rate=1e-3)
+        train_classifier(X, y, dataset_name, num_epochs=10, batch_size=128, learning_rate=1e-3)
         
     # Load trained model
     print("Loading trained model...")

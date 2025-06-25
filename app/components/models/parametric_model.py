@@ -109,14 +109,15 @@ def train_classifier(X, y, dataset_name, num_epochs=3, batch_size=128, learning_
         X_img = X_img[perm]
         y = y[perm]
         for i in range(num_batches):
+            print(f'batch {i+1} of {num_batches}...')
             batch_x = X_img[i*batch_size:(i+1)*batch_size]
             batch_y = y[i*batch_size:(i+1)*batch_size]
-            def loss_fn(params):
-                logits = model.apply({'params': params}, batch_x, return_intermediates=False)
-                loss = cross_entropy_loss(logits, batch_y)
+            def loss_fn(params, x):
+                logits = state.apply_fn({'params': params}, x, return_intermediates=False)
+                loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, batch_y))
                 return loss
-            grad_fn = jax.value_and_grad(loss_fn)
-            loss, grads = grad_fn(state.params)
+            grad_fn = jax.jit(jax.value_and_grad(loss_fn))
+            loss, grads = grad_fn(state.params, batch_x)
             state = state.apply_gradients(grads=grads)
         print(f"Epoch {epoch+1}/{num_epochs} completed. Loss: {loss}")
     # Save checkpoint
