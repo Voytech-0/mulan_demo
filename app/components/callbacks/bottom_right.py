@@ -15,9 +15,12 @@ def register_data_info_callbacks(app):
     )
     def augment_data(brightness, contrast, data_cache, dataset_name, n_samples=100):
         X, y, _ = get_dataset(dataset_name)
+        empirical_min, emirical_max, dtype = X.min(), X.max(), X.dtype
         random_indices = np.random.choice(len(X), n_samples, replace=False)
         X, y = X[random_indices], y[random_indices]
         X = contrast * X + (brightness - 1)
-        X = np.clip(X, 0, 1).astype(float)
+        X = np.clip(X, empirical_min, emirical_max)
+        if dtype == int:
+            X = np.round(X).astype(int)
         data_cache['augmented'] = (X, y)
         return data_cache

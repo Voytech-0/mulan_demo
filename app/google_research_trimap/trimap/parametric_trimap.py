@@ -121,7 +121,6 @@ def fit(rng_key, inputs, n_dims,
     return model_description, state.params
 
 def transform(inputs, model_description, params):
-
     model = ParametricTriMap(**model_description)
     return model.apply({'params': params}, inputs, method=ParametricTriMap.encode)
 

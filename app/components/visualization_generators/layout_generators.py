@@ -5,8 +5,7 @@ from components.configs.settings import CELL_STYLE, CELL_STYLE_RIGHT, TABLE_STYL
 from components.visualization_generators.plot_maker import create_data_distribution_plot
 
 
-def create_metadata_display(dataset_name, data, class_names=None, color_map=None):
-    data_distribution_fig = create_data_distribution_plot(data, class_names=class_names, color_map=color_map)
+def create_metadata_display(dataset_name, data, figure):
     return html.Div([
         dbc.Row([
             dbc.Col(
@@ -17,7 +16,7 @@ def create_metadata_display(dataset_name, data, class_names=None, color_map=None
                     html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
                 ], style={'text-align': 'left'}), width=5),
             dbc.Col(
-                dcc.Graph(id='class-distribution-plot', figure=data_distribution_fig,
+                dcc.Graph(id='metadata-plot', figure=figure,
                           style={'height': '25vh', 'width': '100%', 'padding': '1rem', 'color': 'white',
                                  'margin-bottom': '2rem'}), width=7)
         ])], style={

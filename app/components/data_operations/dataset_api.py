@@ -82,67 +82,6 @@ def load_mnist():
             self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
     return Dataset(X, y)
 
-def load_elephant():
-    """Load elephant dataset from a sample image with variations."""
-    # URL of a sample elephant image from a reliable source
-    url = "https://upload.wikimedia.org/wikipedia/commons/3/37/African_Bush_Elephant.jpg"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        img = Image.open(BytesIO(response.content))
-
-        # Convert to grayscale and resize
-        img = img.convert('L')
-        img = img.resize((28, 28))
-
-        # Convert to numpy array
-        base_img = np.array(img)
-
-        # Create variations of the image
-        n_samples = 10  # Create 10 variations
-        X = np.zeros((n_samples, 784))  # 28x28 = 784 pixels
-
-        # Original image
-        X[0] = base_img.reshape(-1)
-
-        # Create variations with different transformations
-        for i in range(1, n_samples):
-            # Random rotation
-            angle = np.random.uniform(-15, 15)
-            rotated = img.rotate(angle)
-            # Random brightness adjustment
-            brightness = np.random.uniform(0.8, 1.2)
-            adjusted = np.clip(np.array(rotated) * brightness, 0, 255).astype(np.uint8)
-            # Add some noise
-            noise = np.random.normal(0, 10, adjusted.shape).astype(np.uint8)
-            noisy = np.clip(adjusted + noise, 0, 255).astype(np.uint8)
-            X[i] = noisy.reshape(-1)
-
-        y = np.zeros(n_samples)  # All samples are class 0 (elephant)
-
-        # Create a dataset-like object
-        class Dataset:
-            def __init__(self, data, target):
-                self.data = data
-                self.target = target
-                self.target_names = ['Elephant']
-                # Add feature names for Elephant (pixel coordinates)
-                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-        return Dataset(X, y)
-    except Exception as e:
-        print(f"Error loading elephant image: {str(e)}")
-        # Return a fallback dataset with multiple samples if image loading fails
-        n_samples = 10
-        X = np.random.rand(n_samples, 784)  # Random data
-        y = np.zeros(n_samples)
-        class Dataset:
-            def __init__(self, data, target):
-                self.data = data
-                self.target = target
-                self.target_names = ['Elephant']
-                self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
-        return Dataset(X, y)
-
 # Testing datasets
 # Testing datasets
 
@@ -194,7 +133,6 @@ DATASET_LOADERS = {
     "Breast Cancer": datasets.load_breast_cancer,
     "Fashion MNIST": load_fashion_mnist,
     "MNIST": load_mnist,
-    "Elephant": load_elephant,
     "PACS - Photo": lambda: load_PACS("photo"),
     "PACS - Sketch": lambda: load_PACS("sketch"),
     "PACS - Cartoon": lambda: load_PACS("cartoon"),

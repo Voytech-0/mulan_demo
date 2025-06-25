@@ -12,3 +12,13 @@
 - PAC dataset
 - fix layout
 - implement different image space whatever that means (maybe only diplay it when generative mode: could replace the iterative slider)
+
+
+- while animation also mapiing of the points, option for images not only dots
+- change thumbanails when changed distances - think dash_bootstrap_components
+- dataset augmentation 
+- information about each dataset
+- generate grid
+- generative mode
+- use saved prec, full grid prec
+- augmentation - pls datapoint make into batched instead of osobitne
