@@ -105,6 +105,7 @@ def create_layout(app):
                         options=[
                             {"label": "Classic", "value": "classic"},
                             {"label": "PACS", "value": "pacs"},
+                            {"label": "Testing", "value": "testing"},
                             {"label": "Custom", "value": "custom_upload"}
                         ],
                         value="classic",
