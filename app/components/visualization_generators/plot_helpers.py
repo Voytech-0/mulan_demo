@@ -33,7 +33,7 @@ def create_color_map(y):
 
 
 def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
-    is_contiunuous = len(np.unique(y)) > 20
+    is_continuous = len(np.unique(y)) > 20
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
 

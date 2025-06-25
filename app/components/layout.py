@@ -16,7 +16,7 @@ def create_layout(app):
         dcc.Store(id='full-grid-visible', data=False),
         dcc.Store(id='last-clicked-point', data=None),
         dcc.Store(id='focused-embedding', data='trimap'),
-        dcc.Store(id='calculation-flags', data={}),
+        dcc.Store(id='added-data-cache', data={}),
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
@@ -66,7 +66,7 @@ def create_layout(app):
                     children=[
                         html.H2("Generate New Datapoints"),
                         DashCanvas(
-                            id='canvas',
+                            id={'type': 'canvas', 'index': 0},
                             width=500,
                             height=500,
                             lineWidth=50,
@@ -76,12 +76,11 @@ def create_layout(app):
                             tool='pencil',
                         ),
                         dbc.Button(
-                            "Submit Drawing",
-                            id="submit_drawing",
+                            "Clear",
+                            id="clear-drawing",
                             color="primary",
                             className="mt-3"
                         ),
-                        dcc.Store(id='added-data-cache', data={}),
                     ],
                     style={'height': '0', 'border': '1px solid #dee2e6', 'padding': '1rem', 'margin-bottom': '0.5rem', 'display': 'block',
                            'visibility': 'hidden'}
