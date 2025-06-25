@@ -42,9 +42,9 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
         emb_add = ptrimap.transform(X_add, model, params)
     else:
         key = random.PRNGKey(0)
-        embedding, _ = compute_trimap_iterative(dataset, distance)
+        embedding, _ = compute_trimap_iterative(dataset, distance, False)
         X, _, _ = get_dataset(dataset)
-        emb_add = trimap.embed_new_points(key, X_add, X, embedding)
+        emb_add = trimap.embed_new_points(key, X_add, X, embedding, verbose=True)
 
     return emb_add
 

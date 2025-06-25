@@ -361,7 +361,6 @@ def generate_triplets(key,
                       weight_temp=0.5,
                       distance='euclidean',
                       verbose=False,
-                      precomputed_embeddings=None,
                       return_knn_aux=False):
   """Generate triplets.
 
@@ -380,30 +379,27 @@ def generate_triplets(key,
   Returns:
     triplets and weights
   """
-  if precomputed_embeddings is None:
-    full_inputs = inputs
-  else:
-    full_inputs = np.concatenate((inputs, precomputed_embeddings), axis=0)
 
-  n_points = full_inputs.shape[0]
+  n_points = inputs.shape[0]
   n_extra = min(n_inliers + 50, n_points)
-  index = pynndescent.NNDescent(full_inputs, metric=distance)
+  index = pynndescent.NNDescent(inputs, metric=distance)
   index.prepare()
   neighbors = index.query(inputs, n_extra)[0]
+
   neighbors = np.concatenate((np.arange(inputs.shape[0]).reshape([-1, 1]), neighbors),
                              1)
   if verbose:
     logging.info('found nearest neighbors')
   distance_fn = get_distance_fn(distance)
   # conpute scaled neighbors and the scale parameter
-  knn_distances, neighbors, sig = find_scaled_neighbors(full_inputs, neighbors,
+  knn_distances, neighbors, sig = find_scaled_neighbors(inputs, neighbors,
                                                         distance_fn)
   neighbors = neighbors[:, :n_inliers + 1]
   knn_distances = knn_distances[:, :n_inliers + 1]
   key, use_key = random.split(key)
   triplets = sample_knn_triplets(use_key, neighbors, n_inliers, n_outliers)
   weights = find_triplet_weights(
-    full_inputs,
+    inputs,
     triplets,
     neighbors[:, 1:n_inliers + 1],
     distance_fn,
@@ -632,6 +628,7 @@ def transform(key,
     embedding = jnp.array(init_embedding, dtype=jnp.float32)
 
   n_triplets = float(triplets.shape[0])
+
   lr = lr * n_points / n_triplets
   if verbose:
     logging.info('running TriMap using DBD')
@@ -675,6 +672,94 @@ def transform(key,
     return embedings_series
   return embedding
 
+def _embed_with_base(key,
+                     new,
+                     base,
+                     projected_base,
+                     n_inliers=10,
+                     n_outliers=5,
+                     n_random=3,
+                     distance='euclidean',
+                     output_metric='euclidean',
+                     n_iters=200,
+                     lr=0.1,
+                     weight_temp=0.5,
+                     init_embedding='interpolation',
+                     verbose=False,
+                     epsilon=1e-7):
+  """Embeds a new high-dimensional point into an existing TriMap projection."""
+  if verbose:
+    t = time.time()
+  n_points = new.shape[0]
+  projected_dim = projected_base.shape[-1]
+
+  key, use_key = random.split(key)
+  full_inputs = np.concatenate((new, base), axis=0)
+  triplets, weights, (neig, knn_dist) = generate_triplets(
+    use_key,
+    full_inputs,
+    n_inliers,
+    n_outliers,
+    n_random,
+    weight_temp=weight_temp,
+    distance=distance,
+    verbose=verbose,
+    return_knn_aux=True)
+  triplets, weights, neig, knn_dist = triplets[:n_points], weights[:n_points], neig[:n_points], knn_dist[:n_points]
+  n_triplets = triplets.shape[0]
+  # begin with linear interpolation using weights
+  if init_embedding == 'interpolation':
+    projected_data = jnp.zeros((n_points, projected_dim))
+    projected_base = jnp.concatenate((projected_data, projected_base), axis=0)
+
+    inlier_indices = slice(1, n_inliers + 1)
+    neig, knn_dist = neig[:, inlier_indices], knn_dist[:, inlier_indices]
+    valid_neig = neig >= n_points
+
+    # triplet weights are all normalized w.r.t same out sample. 0 out weights between 2 new points
+    interpolation_weights = jnp.where(valid_neig, jnp.abs(knn_dist), 0)
+    interpolation_weights /= (jnp.sum(interpolation_weights, axis=-1, keepdims=True) + epsilon)  # normalize to sum of 1
+    interpolation_weights = jnp.expand_dims(interpolation_weights, -1)
+
+    weighted_embeddings = interpolation_weights * projected_base[neig]
+    weighted_embeddings = jnp.reshape(weighted_embeddings, (n_points, n_inliers, projected_dim))
+    projected_data = jnp.sum(weighted_embeddings, axis=1)
+
+  elif init_embedding == 'random':
+    projected_data = random.uniform(key, shape=(n_points, projected_dim))
+  elif init_embedding == 'zero':
+    projected_data = jnp.zeros((n_points, projected_dim))
+  else:
+    raise NotImplementedError(f"Invalid init_embedding {init_embedding}")
+
+  lr = lr * n_points / float(n_triplets)
+
+  if verbose:
+    logging.info('running TriMap using DBD')
+
+  vel = jnp.zeros_like(projected_data, dtype=jnp.float32)
+  gain = jnp.ones_like(projected_data, dtype=jnp.float32)
+
+  modified_trimap_loss = lambda x, y: trimap_loss(jnp.concatenate((x, y), axis=0), triplets, weights)
+  trimap_grad = jax.jit(jax.grad(modified_trimap_loss))
+
+  for itr in range(n_iters):
+    gamma = _FINAL_MOMENTUM if itr > _SWITCH_ITER else _INIT_MOMENTUM
+    grad = trimap_grad(projected_data + gamma * vel, projected_base)
+    # update the embedding
+    projected_data, vel, gain = update_embedding_dbd(projected_data, grad, vel, gain, lr, itr)
+    if verbose:
+      if (itr + 1) % _DISPLAY_ITER == 0:
+        loss, n_violated = trimap_metrics(jnp.concatenate((projected_data, projected_base)), triplets, weights)
+        logging.info(
+          'Iteration: %4d / %4d, Loss: %3.3f, Violated triplets: %0.4f',
+          itr + 1, n_iters, loss, n_violated / n_triplets * 100.0)
+
+  if verbose:
+    elapsed = str(datetime.timedelta(seconds=time.time() - t))
+    logging.info('Elapsed time: %s', elapsed)
+
+  return projected_data
 
 def inverse_transform(key,
                       new_embeddings,
@@ -688,188 +773,32 @@ def inverse_transform(key,
                       lr=0.1,
                       n_iters=20,
                       init_embedding='interpolation',
-                      triplets=None,
-                      weights=None,
                       verbose=False):
-  norm_stats = {'min': jnp.min(original_data), 'max': jnp.max(original_data)}
-  original_data = (original_data - norm_stats['min']) / (norm_stats['max'] - norm_stats['min'])
-
-  if verbose:
-    t = time.time()
-  n_points = new_embeddings.shape[0]
-  original_dim = original_data.shape[-1]
-
-  key, use_key = random.split(key)
-  triplets, weights, (neig, knn_dist) = generate_triplets(
-    use_key,
-    new_embeddings,
-    n_inliers,
-    n_outliers,
-    n_random,
-    weight_temp=weight_temp,
-    distance=distance,
-    verbose=verbose,
-    precomputed_embeddings=embeddings,
-    return_knn_aux=True)
-  n_triplets = triplets.shape[0]
-
-  # begin with linear interpolation using weights
-  if init_embedding == 'interpolation':
-    inversed_data = jnp.zeros((n_points, original_dim))
-    original_data = jnp.concatenate((inversed_data, original_data), axis=0)
-
-    inlier_indices = slice(1, n_inliers + 1)
-    neig, knn_dist = neig[:, inlier_indices], knn_dist[:, inlier_indices]
-    valid_neig = neig >= n_points
-
-    # triplet weights are all normalized w.r.t same out sample. 0 out weights between 2 new points
-    interpolation_weights = jnp.where(valid_neig, knn_dist, 0)
-    if interpolation_weights.sum() != 0:
-      interpolation_weights /= interpolation_weights.sum()  # normalize to sum of 1
-    interpolation_weights = jnp.expand_dims(interpolation_weights, -1)
-
-    weighted_original_data = interpolation_weights * original_data[neig]
-    jnp.reshape(weighted_original_data, (n_points, n_inliers, original_dim))
-    inversed_data = jnp.sum(weighted_original_data, axis=1)
-    # return inversed_data
-  elif init_embedding == 'random':
-    inversed_data = random.uniform(key, shape=(n_points, original_dim))
-  elif init_embedding == 'zero':
-    inversed_data = jnp.zeros((n_points, original_dim))
-  else:
-    raise NotImplementedError(f"Invalid init_embedding {init_embedding}")
-
-  lr = lr * n_points / float(n_triplets)
-
-  if verbose:
-    logging.info('running TriMap using DBD')
-
-  vel = jnp.zeros_like(inversed_data, dtype=jnp.float32)
-  gain = jnp.ones_like(inversed_data, dtype=jnp.float32)
-
-  modified_trimap_loss = lambda x, y: trimap_loss(jnp.concatenate((x, y), axis=0), triplets, weights)
-  trimap_grad = jax.jit(jax.grad(modified_trimap_loss))
-
-  for itr in range(n_iters):
-    gamma = _FINAL_MOMENTUM if itr > _SWITCH_ITER else _INIT_MOMENTUM
-    grad = trimap_grad(inversed_data + gamma * vel, original_data)
-    # update the embedding
-    inversed_data, gain, vel = update_embedding_dbd(inversed_data, grad, vel, gain, lr, itr)
-    if verbose:
-      if (itr + 1) % _DISPLAY_ITER == 0:
-        loss, n_violated = trimap_metrics(jnp.concatenate((inversed_data, original_data)), triplets, weights)
-        logging.info(
-          'Iteration: %4d / %4d, Loss: %3.3f, Violated triplets: %0.4f',
-          itr + 1, n_iters, loss, n_violated / n_triplets * 100.0)
-
-  if verbose:
-    elapsed = str(datetime.timedelta(seconds=time.time() - t))
-    logging.info('Elapsed time: %s', elapsed)
-
-  inversed_data = inversed_data * (norm_stats['max'] - norm_stats['min']) + norm_stats['min']
+  inversed_data = _embed_with_base(key, new_embeddings, base=embeddings, projected_base=original_data,
+                                   n_inliers=n_inliers, n_outliers=n_outliers, n_random=n_random,
+                                   weight_temp=weight_temp, distance=distance,
+                                   lr=lr, n_iters=n_iters, init_embedding=init_embedding, verbose=verbose)
   return inversed_data
 
 
-def embed_new_point(key,
-                    new_point,
-                    original_inputs,
-                    original_embedding,
+def embed_new_points(key,
+                    new_points,
+                    original_data,
+                    embeddings,
                     n_inliers=10,
                     n_outliers=5,
+                    n_random=3,
                     distance='euclidean',
                     output_metric='euclidean',
                     n_iters=200,
                     lr=0.1,
                     weight_temp=0.5,
-                    init='average'):
+                    init_embedding='interpolation',
+                    verbose=False):
   """Embeds a new high-dimensional point into an existing TriMap projection."""
+  projected_data = _embed_with_base(key, new_points, base=original_data, projected_base=embeddings,
+                                    n_inliers=n_inliers, n_outliers=n_outliers, n_random=n_random,
+                                    weight_temp=weight_temp, distance=distance,
+                                    lr=lr, n_iters=n_iters, init_embedding=init_embedding, verbose=verbose)
 
-  distance_fn = get_distance_fn(output_metric)
-  new_point = new_point.reshape(1, -1)
-  n_points = original_inputs.shape[0]
-
-  # Step 1: Nearest neighbors
-  index = pynndescent.NNDescent(original_inputs, metric=distance)
-  index.prepare()
-  neighbors = index.query(new_point, n_inliers)[0][0]
-  neighbors = np.concatenate(([0], neighbors))
-
-  # Combine new point with original inputs for distance calls
-  all_inputs = jnp.concatenate([jnp.array(new_point), jnp.array(original_inputs)], axis=0)
-  sig = jnp.maximum(jnp.mean(jnp.sqrt(jnp.sum((all_inputs[0] - all_inputs[1:][neighbors]) ** 2, axis=-1))), 1e-10)
-  sig = jnp.concatenate([jnp.array([sig]), jnp.ones(n_points)])
-
-  # Step 2: Triplets
-  anchor_idx = 0
-  inlier_indices = neighbors[1:] + 1
-  outlier_candidates = np.setdiff1d(np.arange(n_points), neighbors[1:])
-  key, subkey = random.split(key)
-  outlier_indices = random.choice(subkey, len(outlier_candidates), (n_inliers * n_outliers,), replace=False)
-  outlier_indices = jnp.array(outlier_candidates)[outlier_indices % len(outlier_candidates)] + 1
-
-  anchors = jnp.tile(jnp.array([anchor_idx]), (n_inliers * n_outliers, 1))
-  inliers = jnp.tile(jnp.array(inlier_indices), (n_outliers, 1)).reshape(-1, 1)
-  outliers = outlier_indices.reshape(-1, 1)
-  triplets = jnp.concatenate([anchors, inliers, outliers], axis=1)
-
-  # Step 3: Weights
-  weights = find_triplet_weights(
-    all_inputs,
-    triplets,
-    jnp.array(inlier_indices).reshape(1, -1),
-    distance_fn,
-    sig
-  )
-  weights -= jnp.min(weights)
-  weights = tempered_log(1. + weights, weight_temp)
-
-  # Step 4: Optimize new embedding
-  if init == 'average':
-    initial_pos = jnp.mean(original_embedding[inlier_indices - 1], axis=0)
-  else:
-    key, subkey = random.split(key)
-    initial_pos = random.normal(subkey, (2,)) * _INIT_SCALE
-
-  new_embedding = initial_pos
-  vel = jnp.zeros_like(new_embedding)
-  gain = jnp.ones_like(new_embedding)
-
-  def loss_fn(pos):
-    all_embedding = jnp.concatenate([pos.reshape(1, 2), original_embedding], axis=0)
-    return trimap_loss(all_embedding, triplets, weights)
-
-  grad_fn = jax.grad(loss_fn)
-
-  for i in range(n_iters):
-    gamma = _FINAL_MOMENTUM if i > _SWITCH_ITER else _INIT_MOMENTUM
-    grad = grad_fn(new_embedding + gamma * vel)
-    gain = jnp.where(
-      jnp.sign(vel) != jnp.sign(grad),
-      gain + _INCREASE_GAIN,
-      jnp.maximum(gain * _DAMP_GAIN, _MIN_GAIN)
-    )
-    vel = gamma * vel - lr * gain * grad
-    new_embedding += vel
-
-  return new_embedding
-
-
-def embed_new_points(key, new_points, original_inputs, original_embedding,
-                              n_inliers=10, n_outliers=5, distance='euclidean', output_metric='euclidean', n_iters=200):
-  """Embeds multiple new high-dimensional points into an existing TriMap projection."""
-  new_embeddings = []
-  for i, new_point in enumerate(new_points):
-    key, subkey = random.split(key)
-    emb = embed_new_point(
-      subkey,
-      new_point,
-      original_inputs,
-      original_embedding,
-      n_inliers=n_inliers,
-      n_outliers=n_outliers,
-      distance=distance,
-      output_metric=output_metric,
-      n_iters=n_iters
-    )
-    new_embeddings.append(emb)
-  return jnp.stack(new_embeddings)
+  return projected_data

@@ -4,6 +4,7 @@ from dash import Output, Input, callback_context
 from components.data_operations.dataset_api import get_dataset
 from components.slow_backend_operations.added_features_api import extract_added_data, dynamically_add
 from components.slow_backend_operations.embedding_calculation import compute_all_embeddings
+from components.slow_backend_operations.evaluate_embedding import evaluate_embedding_quality
 from components.visualization_generators.layout_generators import create_metadata_display
 from components.visualization_generators.plot_maker import create_figure, create_animated_figure
 
@@ -158,3 +159,22 @@ def register_main_figure_callbacks(app):
             trimap_class = "method-button-container thumbnail-button mb-3 selected"
 
         return tsne_class, umap_class, trimap_class
+
+    @app.callback(
+        Input('dataset-dropdown', 'value'),
+        Input('dist-dropdown', 'value'),
+        Input('parametric-iterative-switch', 'value'),
+    )
+    def evaluate(dataset_name, distance, parametric):
+        X, y, _ = get_dataset(dataset_name)
+        (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(dataset_name, distance, parametric)
+
+        evaluation_results = {
+            "trimap": evaluate_embedding_quality(X, trimap_emb, y),
+            "tsne": evaluate_embedding_quality(X, tsne_emb, y),
+            "umap": evaluate_embedding_quality(X, umap_emb, y),
+        }
+
+        print("Evaluation before dynamic addition:")
+        for method_name, metrics in evaluation_results.items():
+            print(f"{method_name}: {metrics}")
