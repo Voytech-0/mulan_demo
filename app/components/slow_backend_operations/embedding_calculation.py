@@ -90,11 +90,11 @@ def _locked_function(fun, *args, **kwargs):
     with COMPUTATION_LOCK:
         return fun(*args, **kwargs)
 
-def compute_trimap(dataset_name, distance, parametric):
+def compute_trimap(dataset_name, distance, parametric, export_iters=False):
     if parametric:
         result, total_time, _, _ = compute_trimap_parametric(dataset_name)
     else:
-        result, total_time = compute_trimap_iterative(dataset_name, distance)
+        result, total_time = compute_trimap_iterative(dataset_name, distance, export_iters)
     return result, total_time
 
 def compute_umap(dataset_name, distance):
