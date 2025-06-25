@@ -88,12 +88,12 @@ def create_animated_figure(embedding, y, title, label_name):
             'x': embedding[0][:, 0],
             'y': embedding[0][:, 1],
             'color': y,
-            'color_num': y if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
-            'point_index': point_indices,
             'label': y.astype(str)
         })
     # Use a consistent color palette for both px.scatter and go.Scatter
     color_palette = px.colors.qualitative.Plotly
+    c_min = np.min(y)
+    c_max = np.max(y)
 
     # Compute global min/max for all frames for fixed axes
     all_x = np.concatenate([emb[:, 0] for emb in embedding[:n_frames]])
@@ -106,7 +106,7 @@ def create_animated_figure(embedding, y, title, label_name):
         x='x',
         y='y',
         color='color',
-        custom_data=['point_index', 'label'],
+        custom_data=['label'],
         title=title,
         labels={'x': 'Component 1', 'y': 'Component 2', 'color': label_name},
         color_discrete_sequence=color_palette,
@@ -118,24 +118,20 @@ def create_animated_figure(embedding, y, title, label_name):
         dfi = pd.DataFrame({
             'x': embedding[i][:, 0],
             'y': embedding[i][:, 1],
-            'color': y.astype(str),
-            'color_num': y.astype(int) if np.issubdtype(y.dtype, np.integer) else pd.factorize(y)[0],
-            'point_index': point_indices,
-            'label': y.astype(str)
+            'color': y,
+            'label': y
         })
         scatter = go.Scatter(
             x=dfi['x'],
             y=dfi['y'],
             mode='markers',
             marker=dict(
-                color=dfi['color_num'],
+                color=dfi['color'],
                 colorscale=color_palette,
-                cmin=0,
-                cmax=len(color_palette) - 1
+                cmin=c_min,
+                cmax=c_max
             ),
-            customdata=np.stack([dfi['point_index'], dfi['label']], axis=-1),
-            showlegend=False,
-            hovertemplate="Class: %{customdata[1]}<br>Index: %{customdata[0]}<br>X: %{x}<br>Y: %{y}<extra></extra>"
+            showlegend=False
         )
         frames.append(go.Frame(data=[scatter], name=str(i)))
     fig.frames = frames
