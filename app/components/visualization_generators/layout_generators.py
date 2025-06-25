@@ -1,6 +1,8 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 import numpy as np
+from dash_canvas import DashCanvas
+
 from components.configs.settings import CELL_STYLE, CELL_STYLE_RIGHT, TABLE_STYLE
 from components.visualization_generators.plot_maker import create_data_distribution_plot
 
@@ -90,3 +92,13 @@ def create_metadata_table(features_to_display, X, point_index):
             for name, value in zip(features_to_display, X[point_index][:len(features_to_display)])
         ])
     ], style=TABLE_STYLE)
+
+def new_canvas(n_clicks):
+    return DashCanvas(id={'type': 'canvas', 'index': n_clicks},
+                      width=500,
+                      height=500,
+                      lineWidth=50,
+                      lineColor='black',
+                      hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',
+                                    'redo', 'line', 'select', 'rectangle', 'pencil'],  # remove all except pencil
+                      tool='pencil')

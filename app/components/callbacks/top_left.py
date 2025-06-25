@@ -2,16 +2,18 @@ from math import ceil, floor
 
 import cv2
 import numpy as np
-from dash import dash, Output, Input, State, html
+from dash import dash, Output, Input, State, html, MATCH, ALL
 from dash_canvas.utils import parse_jsonstring
 
 from components.configs.feature_config import IMAGE_ONLY_DATASETS, DATASET_FEATURES
 from components.configs.settings import get_image_style, get_no_image_message_style, get_no_metadata_message_style
 from components.data_operations.dataset_api import dataset_shape, get_dataset
 from components.slow_backend_operations.added_features_api import generate_sample
-from components.visualization_generators.layout_generators import create_coordinate_table, create_metadata_table
+from components.visualization_generators.layout_generators import create_coordinate_table, create_metadata_table, \
+    new_canvas
 from components.visualization_generators.plot_helpers import match_shape, encode_img_as_str
 
+canvas_id = 'canvas'
 
 def _extract_coords(clickData):
     x_coord = clickData['points'][0]['x']
@@ -164,38 +166,47 @@ def register_visualization_callbacks(app):
         return coordinates_table, {'marginTop': '2rem'}
 
     @app.callback(
-        Output('canvas', 'json_data'),  # Clear the canvas
         Output('added-data-cache', 'data', allow_duplicate=True),  # Store processed data
-        Input('submit_drawing', 'n_clicks'),
-        State('canvas', 'json_data'),
+        Input({'type': 'canvas', 'index': ALL}, 'json_data'),
         State('added-data-cache', 'data'),
         State('dataset-dropdown', 'value'),
         prevent_initial_call=True
     )
-    def submit_and_clear(n_clicks, json_data, added_data_cache, dataset_name):
-        if not json_data:
-            return dash.no_update, dash.no_update
+    def submit(json_data, added_data_cache, dataset_name):
+        if json_data[-1] is None:
+            return dash.no_update
 
         canvas_shape = (500, 500)
-        mask = parse_jsonstring(json_data, canvas_shape)
+        mask = parse_jsonstring(json_data[-1], canvas_shape)
 
         # Crop to content
-        ys, xs = np.where(mask)
+        xs, ys = np.where(mask)
         left, right = xs.min(), xs.max()
         top, bottom = ys.min(), ys.max()
         width, height = right - left, bottom - top
         largest_dim = max(width, height)
         pad = (largest_dim - width) / 2, (largest_dim - height) / 2
         mask = mask[left - ceil(pad[0]):right + floor(pad[0]), top - ceil(pad[1]):bottom + floor(pad[1])]
-
         processed = mask.astype(float)
         img_shape = dataset_shape(dataset_name)
+        X, _, _ = get_dataset(dataset_name)
+        processed = cv2.resize(processed, img_shape, interpolation=cv2.INTER_AREA)
 
-        processed = cv2.resize(processed, img_shape)
         processed = np.reshape(processed, -1)
+        processed *= X.max()
         if 'user_generated' not in added_data_cache:
             added_data_cache['user_generated'] = []
         added_data_cache['user_generated'].append(processed)
 
-        return "", added_data_cache
+        return added_data_cache
+
+
+    @app.callback(
+        Output('image-draw', 'children'),
+        Input('clear-drawing', 'n_clicks'),
+        State('image-draw', 'children'),
+        prevent_initial_call=True
+    )
+    def clear(n_clicks, children):
+        return [children[0], new_canvas(n_clicks), children[2]]
 

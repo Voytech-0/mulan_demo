@@ -26,8 +26,8 @@ def extract_added_data(added_data):
                 X_add, y_add = extract_as_np(*added_data['augmented'])
             else:
                 X_add2, y_add2 = extract_as_np(*added_data['augmented'])
-                X_add = np.concatenate((X_add, X_add2), axis=0)
-                y_add = np.concatenate((y_add, y_add2), axis=0)
+                X_add = np.concatenate((X_add2, X_add), axis=0)
+                y_add = np.concatenate((y_add2, y_add), axis=0)
     n_added = X_add.shape[0] if X_add is not None else 0
     return X_add, y_add, n_added
 
@@ -44,7 +44,7 @@ def dynamically_add(added_data, dataset, distance, parametric=False):
         key = random.PRNGKey(0)
         embedding, _ = compute_trimap_iterative(dataset, distance, False)
         X, _, _ = get_dataset(dataset)
-        emb_add = trimap.embed_new_points(key, X_add, X, embedding, verbose=True)
+        emb_add = trimap.embed_new_points(key, X_add, X, embedding, n_iters=1, verbose=True)
 
     return emb_add
 
@@ -57,6 +57,6 @@ def generate_sample(x_coord, y_coord, dataset, distance, parametric=False, expor
     else:
         embeddings, _ = compute_trimap_iterative(dataset, distance, export_iters)
         X, _, _ = get_dataset(dataset)
-        inverse = trimap.inverse_transform(key, data, X, embeddings, verbose=True)
+        inverse = trimap.inverse_transform(key, data, X, embeddings, n_iters=1, verbose=True)
     return inverse
 

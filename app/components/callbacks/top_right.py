@@ -35,11 +35,10 @@ def register_main_figure_callbacks(app):
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
             trimap_emb_add = dynamically_add(added_data_cache, dataset_name, distance, parametric)
-            if (isinstance(X_add, np.ndarray) and isinstance(y_add, np.ndarray) and
-                isinstance(trimap_emb, np.ndarray) and isinstance(trimap_emb_add, np.ndarray)):
-                X = np.concatenate([X, X_add], 0)
-                y = np.concatenate([y, y_add], 0)
-                trimap_emb = np.concatenate([trimap_emb, trimap_emb_add], 0)
+
+            X = np.concatenate([X, X_add], 0)
+            y = np.concatenate([y, y_add], 0)
+            trimap_emb = np.concatenate([trimap_emb, trimap_emb_add], 0)
 
         if method != 'trimap' or not is_animated:
             is_animated = False

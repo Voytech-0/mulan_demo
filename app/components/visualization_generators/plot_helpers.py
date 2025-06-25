@@ -26,7 +26,7 @@ def encode_img_as_str(data_point, fig_size=(4, 4)):
     return img_str
 
 def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
-    is_contiunuous = len(np.unique(y)) > 20
+    is_continuous = len(np.unique(y)) > 20
     # Create a list of customdata for each point, including the point index
     point_indices = np.arange(len(y))
 
@@ -37,6 +37,7 @@ def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
 
     # Map y to class names for legend
     y_int = y.astype(int)
+
     color_seq = px.colors.qualitative.Plotly
 
     n_original = len(y) - n_added
@@ -45,7 +46,7 @@ def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
     if n_added > 0 and embedding.shape[0] == X.shape[0]:
         sections.append(slice(n_original, None))
 
-    if not is_contiunuous:
+    if not is_continuous:
         y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
         unique_labels = pd.Series(y_labels).unique()
         color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}

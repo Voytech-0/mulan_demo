@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from components.configs.feature_config import IMAGE_ONLY_DATASETS
-from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape, create_main_fig_dataframe
+from components.visualization_generators.plot_helpers import encode_img_as_str, create_main_fig_dataframe
 
 
 def empty_fig(title='No dataset selected'):
@@ -49,7 +49,7 @@ def add_new_data_to_fig(fig, df):
                 color=df_subset['color'],
                 line=dict(width=2, color='black')
             ),
-            name=f'Additional: {label}',
+            name='User drawn' if int(label) == -1 else f'Additional: {label}',
             customdata=df_subset[['point_index', 'label']].values,
             hovertemplate='Index: %{customdata[0]}<br>Label: %{customdata[1]}<extra></extra>',
             showlegend=True
@@ -288,7 +288,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
         )
 
     # Additional points
-    if n_added > 0 and embedding is not None and X is not None and embedding.shape[0] != X.shape[0]:
+    if n_added > 0 and embedding.shape[0] == X.shape[0]:
         add_new_data_to_fig(fig, data_frames[1])
 
     if is_thumbnail:
