@@ -94,7 +94,7 @@ def register_visualization_callbacks(app):
         metadata_message = "No metadata to show in this dataset" if dataset_name in IMAGE_ONLY_DATASETS else\
             "Click on a point in the graph to show metadata"
 
-        display_style = 'block' if not enabled else 'none'
+        display_style = 'block' if (not enabled and dataset_name not in IMAGE_ONLY_DATASETS) else 'none'
 
         if invalid:
             return (
@@ -134,7 +134,7 @@ def register_visualization_callbacks(app):
         prevent_initial_call=True
     )
     def display_coordinates(clickData, enabled, dataset_name):
-        invalid = not clickData or not dataset_name in IMAGE_ONLY_DATASETS
+        invalid = not clickData 
 
         if invalid:
             return (
@@ -152,8 +152,7 @@ def register_visualization_callbacks(app):
             digit_label = 'NA'
             coordinates_table = create_coordinate_table(x_coord, y_coord, point_index, class_label, digit_label)
             return coordinates_table, {'marginTop': '2rem'}
-
-
+   
         if 'customdata' in point_data:
             point_index = int(point_data['customdata'][0])
             digit_label = point_data['customdata'][1]

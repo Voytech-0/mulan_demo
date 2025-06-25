@@ -70,7 +70,12 @@ BREAST_CANCER_FEATURES = [
 DIGITS_FEATURES = []
 MNIST_FEATURES = []
 FASHION_MNIST_FEATURES = []
-ELEPHANT_FEATURES = []
+# ELEPHANT_FEATURES = []  # Removed Elephant
+# PACS datasets (no meaningful metadata to display)
+PACS_PHOTO_FEATURES = []
+PACS_SKETCH_FEATURES = []
+PACS_CARTOON_FEATURES = []
+PACS_ART_PAINTING_FEATURES = []
 
 # =============================================================================
 # DATASET DESCRIPTIONS
@@ -83,7 +88,6 @@ DATASET_DESCRIPTIONS = {
     "Breast Cancer": "The Breast Cancer Wisconsin dataset contains features computed from digitized images of fine needle aspirate (FNA) of breast masses, used for binary classification (malignant/benign).",
     "MNIST": "The MNIST dataset consists of 28x28 grayscale images of handwritten digits (0-9). It is a benchmark dataset for image classification.",
     "Fashion MNIST": "Fashion MNIST is a dataset of 28x28 grayscale images of 10 fashion categories, such as shoes, shirts, and bags, intended as a drop-in replacement for the original MNIST dataset.",
-    "Elephant": "The Elephant dataset is a collection of 28x28 grayscale images of elephants, used for image classification tasks.",
     "PACS - Photo": "PACS Photo is a domain from the PACS dataset, containing real-world photographs of objects from seven categories (dog, elephant, giraffe, guitar, horse, house, person).",
     "PACS - Sketch": "PACS Sketch is a domain from the PACS dataset, containing hand-drawn sketches of objects from seven categories.",
     "PACS - Cartoon": "PACS Cartoon is a domain from the PACS dataset, containing cartoon-style images of objects from seven categories.",
@@ -106,8 +110,21 @@ DATASET_FEATURES = {
     "Breast Cancer": BREAST_CANCER_FEATURES,
     "MNIST": MNIST_FEATURES,
     "Fashion MNIST": FASHION_MNIST_FEATURES,
-    "Elephant": ELEPHANT_FEATURES
+    # "Elephant": ELEPHANT_FEATURES,  # Removed Elephant
+    "PACS - Photo": PACS_PHOTO_FEATURES,
+    "PACS - Sketch": PACS_SKETCH_FEATURES,
+    "PACS - Cartoon": PACS_CARTOON_FEATURES,
+    "PACS - Art Painting": PACS_ART_PAINTING_FEATURES
 }
 
 # List of datasets that are purely image data (no meaningful metadata to display)
-IMAGE_ONLY_DATASETS = ["Digits", "MNIST", "Fashion MNIST", "Elephant"] 
+IMAGE_ONLY_DATASETS = [
+    "Digits",
+    "MNIST",
+    "Fashion MNIST",
+    # "Elephant",  # Removed Elephant
+    "PACS - Photo",
+    "PACS - Sketch",
+    "PACS - Cartoon",
+    "PACS - Art Painting"
+] 
