@@ -15,11 +15,11 @@ def create_metadata_display(dataset_name, data):
                     html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
-                ], style={'text-align': 'left'})),
+                ], style={'text-align': 'left'}), width=5),
             dbc.Col(
                 dcc.Graph(id='class-distribution-plot', figure=data_distribution_fig,
-                          style={'height': '25vh', 'width': '60%', 'padding': '1rem', 'color': 'white',
-                                 'margin-bottom': '2rem'}))
+                          style={'height': '25vh', 'width': '100%', 'padding': '1rem', 'color': 'white',
+                                 'margin-bottom': '2rem'}), width=7)
         ])], style={
         'display': 'flex',
         'flexDirection': 'column',

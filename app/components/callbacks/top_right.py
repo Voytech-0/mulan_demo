@@ -92,9 +92,9 @@ def register_main_figure_callbacks(app):
     )
     def time_methods(dataset_name, distance, parametric):
         _, (trimap_time, tsne_time, umap_time) = compute_all_embeddings(dataset_name, distance, parametric)
-        return (f"TRIMAP: {trimap_time:.2f}s",
-                f"t-SNE: {tsne_time:.2f}s",
-                f"UMAP: {umap_time:.2f}s")
+        return (f"{trimap_time:.2f}s",
+                f"{tsne_time:.2f}s",
+                f"{umap_time:.2f}s")
 
     @app.callback(
         Output('metadata-display', 'children'),
