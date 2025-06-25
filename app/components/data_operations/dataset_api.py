@@ -14,7 +14,7 @@ import tensorflow as tf
 
 def load_PACS(domain='photo'):
     """Load PACS dataset."""
-    data_path = '../../data/pacs_data'
+    data_path = 'data/pacs_data'
     if not os.path.exists(data_path):
         raise Exception(f'PACS dataset not found in folder {data_path}.')
 

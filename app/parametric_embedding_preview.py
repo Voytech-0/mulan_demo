@@ -6,9 +6,9 @@ from components.slow_backend_operations.projection_wrapper import TrimapWrapper
 
 # List of image datasets to process
 image_datasets = [
-    "Digits",
-    "MNIST",
-    "Fashion MNIST",
+#    "Digits",
+#    "MNIST",
+#    "Fashion MNIST",
     "PACS - Photo",
     "PACS - Sketch",
     "PACS - Cartoon",
@@ -30,7 +30,7 @@ for dataset_name in image_datasets:
     if not USE_SAVED_CKPT:
         print("Training classifier (if needed)...")
         train_classifier(X, y, dataset_name, num_epochs=10, batch_size=128, learning_rate=1e-3)
-        
+
     # Load trained model
     print("Loading trained model...")
     model, variables = load_pretrained_resnet(dataset_name, num_classes=num_classes)
@@ -81,4 +81,4 @@ for dataset_name in image_datasets:
         print(f"Layer {selected_layer} not found in extracted embeddings.")
 
 print('---')
-print('You can change `selected_layer` in the script to preview TRIMAP for other layers.') 
+print('You can change `selected_layer` in the script to preview TRIMAP for other layers.')
