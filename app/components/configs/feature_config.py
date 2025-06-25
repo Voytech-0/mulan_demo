@@ -73,6 +73,28 @@ FASHION_MNIST_FEATURES = []
 ELEPHANT_FEATURES = []
 
 # =============================================================================
+# DATASET DESCRIPTIONS
+# =============================================================================
+
+DATASET_DESCRIPTIONS = {
+    "Digits": "The Digits dataset consists of 8x8 images of handwritten digits (0-9) from the scikit-learn library. It is commonly used for classification and image recognition tasks.",
+    "Iris": "The Iris dataset is a classic multivariate dataset introduced by Ronald Fisher. It contains measurements of 150 iris flowers from three different species.",
+    "Wine": "The Wine dataset contains the results of a chemical analysis of wines grown in the same region in Italy but derived from three different cultivars.",
+    "Breast Cancer": "The Breast Cancer Wisconsin dataset contains features computed from digitized images of fine needle aspirate (FNA) of breast masses, used for binary classification (malignant/benign).",
+    "MNIST": "The MNIST dataset consists of 28x28 grayscale images of handwritten digits (0-9). It is a benchmark dataset for image classification.",
+    "Fashion MNIST": "Fashion MNIST is a dataset of 28x28 grayscale images of 10 fashion categories, such as shoes, shirts, and bags, intended as a drop-in replacement for the original MNIST dataset.",
+    "Elephant": "The Elephant dataset is a collection of 28x28 grayscale images of elephants, used for image classification tasks.",
+    "PACS - Photo": "PACS Photo is a domain from the PACS dataset, containing real-world photographs of objects from seven categories (dog, elephant, giraffe, guitar, horse, house, person).",
+    "PACS - Sketch": "PACS Sketch is a domain from the PACS dataset, containing hand-drawn sketches of objects from seven categories.",
+    "PACS - Cartoon": "PACS Cartoon is a domain from the PACS dataset, containing cartoon-style images of objects from seven categories.",
+    "PACS - Art Painting": "PACS Art Painting is a domain from the PACS dataset, containing artistic paintings of objects from seven categories.",
+    "Testing - S-curve": "A synthetic 3D S-curve dataset, commonly used for testing dimensionality reduction algorithms.",
+    "Testing - Swiss Roll": "A synthetic 3D Swiss Roll dataset, commonly used for testing manifold learning and dimensionality reduction.",
+    "Testing - Mammoth": "A synthetic 3D dataset shaped like a mammoth, used for visualization and testing.",
+    "custom_upload": "A custom dataset uploaded by the user. The structure and content depend on the uploaded data."
+}
+
+# =============================================================================
 # DATASET CONFIGURATIONS
 # =============================================================================
 
