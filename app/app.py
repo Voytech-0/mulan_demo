@@ -12,7 +12,7 @@ import plotly.io as pio
 from components.cache import cache
 
 from components.layout import create_layout
-from components.callbacks import register_callbacks
+from components.callback_router import register_callbacks
 
 # Configure Plotly template
 pio.templates.default = "plotly_dark"
