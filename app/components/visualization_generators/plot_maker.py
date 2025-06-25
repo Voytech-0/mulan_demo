@@ -1,10 +1,13 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import io
+import base64
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from components.visualization_generators.plot_helpers import encode_img_as_str
+from components.visualization_generators.plot_helpers import encode_img_as_str, match_shape
 
 def empty_fig(title='No dataset selected'):
     return px.scatter(title=title)
@@ -54,29 +57,33 @@ _image_cache = {}
 
 
 def create_datapoint_image(data_point, size=(20, 20)):
-    """Create a small image representation of a datapoint."""
-    # Create a cache key based on the data point and size
     cache_key = (hash(data_point.tobytes()), size)
-
-    # Check if we have this image cached
     if cache_key in _image_cache:
         return _image_cache[cache_key]
-
-    # Normalize the data point to 0-1 range
     normalized = (data_point - data_point.min()) / (data_point.max() - data_point.min())
-
-    img_data_url = encode_img_as_str(normalized)
-
-    # Cache the result
+    side_length = int(np.sqrt(len(normalized)))
+    if side_length * side_length == len(normalized):
+        img_data = normalized.reshape(side_length, side_length)
+        cmap = 'gray'
+        fig_size = (size[0]/50, size[1]/50) if side_length == 8 else (size[0]/25, size[1]/25)
+    else:
+        img_data = normalized.reshape(-1, 8)
+        cmap = 'viridis'
+        fig_size = (size[0]/100, size[1]/100)
+    plt.figure(figsize=fig_size, dpi=300)
+    plt.imshow(img_data, cmap=cmap, interpolation='nearest')
+    plt.axis('off')
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
+    plt.close()
+    buf.seek(0)
+    img_str = base64.b64encode(buf.read()).decode()
+    img_data_url = f"data:image/png;base64,{img_str}"
     _image_cache[cache_key] = img_data_url
-
-    # Limit cache size to prevent memory issues
     if len(_image_cache) > 1000:
-        # Remove oldest entries (simple FIFO)
         oldest_keys = list(_image_cache.keys())[:100]
         for key in oldest_keys:
             del _image_cache[key]
-
     return img_data_url
 
 
@@ -225,7 +232,7 @@ def create_animated_figure(embedding, y, title, label_name):
     )
     return fig
 
-def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0):
+def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0, dataset_name=None):
     try:
         if embedding is None or len(embedding) == 0 or embedding.shape[-1] < 2:
             return px.scatter(title=f"{title} (no data)")
@@ -339,8 +346,8 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
                 text=hover_texts,
                 selector=dict(type='scatter')
             )
-            for i, (idx, img_str) in enumerate(zip(indices_to_show, images)):
-                x, y = df.iloc[idx]['x'], df.iloc[idx]['y']
+            for i, img_str in enumerate(images):
+                x, y = df.iloc[indices_to_show[i]]['x'], df.iloc[indices_to_show[i]]['y']
                 x_range = df['x'].max() - df['x'].min()
                 y_range = df['y'].max() - df['y'].min()
                 base_size = max(x_range, y_range) * 0.04
