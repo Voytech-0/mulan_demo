@@ -357,7 +357,21 @@ def create_data_distribution_plot(data, class_names=None, color_map=None):
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='white',
-        margin=dict(l=0, r=0, t=30, b=30),
-        height=200
+        margin=dict(l=0, r=0, t=30, b=30)
+    )
+    return fig
+
+def create_3d_plot(X, y, title, class_names=None):
+    df = pd.DataFrame(X[:, :3], columns=['x', 'y', 'z'])
+    df['label'] = y
+    if class_names is not None and y.dtype.kind != 'f':
+        df['label'] = df['label'].astype(int).apply(lambda i: class_names[i])
+
+    fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white',
+        margin=dict(l=0, r=0, t=30, b=30)
     )
     return fig

@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
-from dash import Output, Input, callback_context
+from dash import Output, Input, callback_context, dcc
 import plotly.express as px
 
 from components.data_operations.dataset_api import get_dataset
 from components.slow_backend_operations.added_features_api import extract_added_data, dynamically_add
 from components.slow_backend_operations.embedding_calculation import compute_all_embeddings
 from components.visualization_generators.layout_generators import create_metadata_display
-from components.visualization_generators.plot_maker import create_figure, create_animated_figure
+from components.visualization_generators.plot_maker import create_figure, create_animated_figure, create_3d_plot, \
+    create_data_distribution_plot
 
 
 def register_main_figure_callbacks(app):
@@ -102,21 +103,17 @@ def register_main_figure_callbacks(app):
         Output('metadata-display', 'children'),
         Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
+        Input('dataset-family-dropdown', 'value'),
         Input('focused-embedding', 'data'),
     )
-    def update_metadata(dataset_name, method):
+    def update_metadata(dataset_name, family, method):
         X, y, data = get_dataset(dataset_name)
         # Compute class_names and color_map as in create_figure
         class_names = getattr(data, 'target_names', None)
         if class_names is None:
             unique_classes = np.unique(y)
             class_names = [str(c) for c in unique_classes]
-        y_int = y.astype(int)
-        color_seq = px.colors.qualitative.Plotly
-        y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-        # Use class_names order for color_map to ensure consistency
-        color_map = {str(class_names[i]): color_seq[i % len(color_seq)] for i in range(len(class_names))}
-        metadata = create_metadata_display(dataset_name, data, class_names=class_names, color_map=color_map)
+
         ctx = callback_context
         calc_status = ""
         if not ctx.triggered:
@@ -132,6 +129,16 @@ def register_main_figure_callbacks(app):
         elif trigger_id == 'focused-embedding':
             calc_status = f"Calculated {method} embedding"
 
+        if family == 'testing':
+            figure = create_3d_plot(X, y, f"3D plot of {dataset_name}", class_names)
+        else:
+            y_int = y.astype(int)
+            color_seq = px.colors.qualitative.Plotly
+            # Use class_names order for color_map to ensure consistency
+            color_map = {str(class_names[i]): color_seq[i % len(color_seq)] for i in range(len(class_names))}
+            figure = create_data_distribution_plot(data, class_names=class_names, color_map=color_map)
+
+        metadata = create_metadata_display(dataset_name, data, figure)
         return metadata, calc_status
     @app.callback(
         Output('focused-embedding', 'data'),
