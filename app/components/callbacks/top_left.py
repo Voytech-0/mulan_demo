@@ -174,7 +174,7 @@ def register_visualization_callbacks(app):
     )
     def submit_and_clear(n_clicks, json_data, added_data_cache, dataset_name):
         if not json_data:
-            return dash.no_update, dash.no_updateInput
+            return dash.no_update, dash.no_update
 
         canvas_shape = (500, 500)
         mask = parse_jsonstring(json_data, canvas_shape)
@@ -198,3 +198,4 @@ def register_visualization_callbacks(app):
         added_data_cache['user_generated'].append(processed)
 
         return "", added_data_cache
+

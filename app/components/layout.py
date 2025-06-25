@@ -20,15 +20,6 @@ def create_layout(app):
         dbc.Row([
             # Left Column (4/12 width): Image display and Dataset Info
             dbc.Col([
-                # Full Grid Button
-                dbc.Row([
-                    dbc.Col(dbc.Button(
-                        [html.I(className="fas fa-th-large me-2"), "Full Grid"],
-                        id="full-grid-btn",
-                        color="secondary",
-                        className="control-button"
-                    ), width="auto")
-                ], className="mb-3"),
                 html.Div(
                     id="full-grid-container",
                     children=[],  # Filled by another callback below
@@ -77,7 +68,7 @@ def create_layout(app):
                         DashCanvas(
                             id='canvas',
                             width=500,
-                            height=5000,
+                            height=500,
                             lineWidth=50,
                             lineColor='black',
                             hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',
@@ -172,47 +163,39 @@ def create_layout(app):
                 ], className="mb-3 align-items-center"),
 
                 # Animation toggle below Image Space
-                dbc.Row([
-                    dbc.Col(html.Label("Animation:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=3),
-                    dbc.Col(
-                        dbc.Switch(
-                            id="is-animated-switch",
-                            value=False,
-                            className="me-2"
-                        ),
-                        width=9
-                    )
-                ], className="mb-3 align-items-center"),
+               
 
                 dbc.Row([
-                    dbc.Col([
+                    dbc.Col([ 
                         dbc.Row([
-                            dbc.Col(html.P("Use Saved", className="mb-0 me-2 text-white"), width="auto"),
-                            dbc.Col(dbc.Switch(
-                                id="recalculate-switch",
-                                value=False,
-                                className="me-2"
-                            ), width="auto"),
-                            dbc.Col(html.P("Recalculate", className="mb-0 text-white"), width="auto"),
-                        ], align="center", justify="between", className="mb-3"),
+                            dbc.Col(html.Label("Animation:", className="align-self-center", style={'color': 'white', 'white-space': 'nowrap'}), width=5),
+                            dbc.Col(
+                                dbc.Switch(
+                                    id="is-animated-switch",
+                                    value=False,
+                                    className="me-2"
+                                ),
+                                width=2
+                            )
+                        ], align="center", justify="start", className="mb-3"),
                         dbc.Row([
-                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width="auto"),
+                            dbc.Col(html.P("Iterative mode", className="mb-0 text-white"), width=5),
                             dbc.Col(dbc.Switch(
                                 id="parametric-iterative-switch",
                                 value=False,
                                 className="me-2"
-                            ), width="auto"),
-                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width="auto"),
+                            ), width=2),
+                            dbc.Col(html.P("Parametric mode", className="mb-0 me-2 text-white"), width=5),
 
                         ], align="center", justify="between", className="mb-3"),
                         dbc.Row([
-                            dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width="auto"),
+                            dbc.Col(html.P("Dots", className="mb-0 me-2 text-white"), width=5),
                             dbc.Col(dbc.Switch(
                                 id="dots-images-switch",
                                 value=False,
                                 className="me-2"
-                            ), width="auto"),
-                            dbc.Col(html.P("Images", className="mb-0 text-white"), width="auto")
+                            ), width=2),
+                            dbc.Col(html.P("Images", className="mb-0 text-white"), width=5)
                         ], align="center", justify="between", className="mb-3"),
                     ], width=12),
                 ]),
@@ -320,7 +303,7 @@ def create_layout(app):
                             children="",
                             style={'height': '25vh', 'border': f'1px solid {BORDER_COLOR}', 'padding': '1rem', 'margin-top': '1rem', 'backgroundColor': BACKGROUND_COLOR, 'color': 'white'}
                         ),
-                        width=7
+                        width=8
                     ),
                     dbc.Col(
                         html.Div([
@@ -348,7 +331,7 @@ def create_layout(app):
                                 className='mb-3'
                             )
                         ], style={'height': '25vh', 'border': '1px solid #dee2e6', 'padding': '1rem', 'backgroundColor': '#23272b', 'margin-top': '1rem', 'color': 'white'})
-                        , width=5
+                        , width=4
                     )
                 ])
             ], width=8)

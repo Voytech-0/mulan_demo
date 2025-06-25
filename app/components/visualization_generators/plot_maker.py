@@ -312,7 +312,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
     print('finished creating figure')
     return fig
 
-def create_data_distribution_plot(data):
+def create_data_distribution_plot(data, class_names=None, color_map=None):
     class_counts = pd.Series(data.target).value_counts().sort_index()
 
     df = pd.DataFrame({
@@ -320,7 +320,25 @@ def create_data_distribution_plot(data):
         'Count': class_counts.values
     })
 
-    fig = px.bar(df, x='Class', y='Count', labels={'Class': 'Class', 'Count': 'Sample Count'})
+    # If class_names are provided, map class indices to names for x-axis
+    if class_names is not None:
+        df['ClassName'] = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in df['Class']]
+    else:
+        df['ClassName'] = df['Class'].astype(str)
+
+    # If color_map is provided, ensure keys are str and use as color_discrete_map
+    color_discrete_map = None
+    if color_map is not None:
+        color_discrete_map = {str(k): v for k, v in color_map.items()}
+
+    fig = px.bar(
+        df,
+        x='ClassName',
+        y='Count',
+        color='ClassName',
+        labels={'ClassName': 'Class', 'Count': 'Sample Count'},
+        color_discrete_map=color_discrete_map
+    )
 
     fig.update_layout(
         title_font_size=16,
@@ -339,7 +357,21 @@ def create_data_distribution_plot(data):
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='white',
-        margin=dict(l=0, r=0, t=30, b=30),
-        height=200
+        margin=dict(l=0, r=0, t=30, b=30)
+    )
+    return fig
+
+def create_3d_plot(X, y, title, class_names=None):
+    df = pd.DataFrame(X[:, :3], columns=['x', 'y', 'z'])
+    df['label'] = y
+    if class_names is not None and y.dtype.kind != 'f':
+        df['label'] = df['label'].astype(int).apply(lambda i: class_names[i])
+
+    fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white',
+        margin=dict(l=0, r=0, t=30, b=30)
     )
     return fig

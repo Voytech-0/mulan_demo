@@ -1,12 +1,15 @@
 import numpy as np
-from dash import Output, Input, callback_context
+import pandas as pd
+from dash import Output, Input, callback_context, dcc
+import plotly.express as px
 
 from components.data_operations.dataset_api import get_dataset
 from components.slow_backend_operations.added_features_api import extract_added_data, dynamically_add
 from components.slow_backend_operations.embedding_calculation import compute_all_embeddings
 from components.slow_backend_operations.evaluate_embedding import evaluate_embedding_quality
 from components.visualization_generators.layout_generators import create_metadata_display
-from components.visualization_generators.plot_maker import create_figure, create_animated_figure
+from components.visualization_generators.plot_maker import create_figure, create_animated_figure, create_3d_plot, \
+    create_data_distribution_plot
 
 
 def register_main_figure_callbacks(app):
@@ -32,7 +35,8 @@ def register_main_figure_callbacks(app):
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
             trimap_emb_add = dynamically_add(added_data_cache, dataset_name, distance, parametric)
-            if X_add is not None and y_add is not None and trimap_emb is not None and trimap_emb_add is not None:
+            if (isinstance(X_add, np.ndarray) and isinstance(y_add, np.ndarray) and
+                isinstance(trimap_emb, np.ndarray) and isinstance(trimap_emb_add, np.ndarray)):
                 X = np.concatenate([X, X_add], 0)
                 y = np.concatenate([y, y_add], 0)
                 trimap_emb = np.concatenate([trimap_emb, trimap_emb_add], 0)
@@ -92,19 +96,25 @@ def register_main_figure_callbacks(app):
     )
     def time_methods(dataset_name, distance, parametric):
         _, (trimap_time, tsne_time, umap_time) = compute_all_embeddings(dataset_name, distance, parametric)
-        return (f"TRIMAP: {trimap_time:.2f}s",
-                f"t-SNE: {tsne_time:.2f}s",
-                f"UMAP: {umap_time:.2f}s")
+        return (f"{trimap_time:.2f}s",
+                f"{tsne_time:.2f}s",
+                f"{umap_time:.2f}s")
 
     @app.callback(
         Output('metadata-display', 'children'),
         Output('calculation-status', 'children'),
         Input('dataset-dropdown', 'value'),
+        Input('dataset-family-dropdown', 'value'),
         Input('focused-embedding', 'data'),
     )
-    def update_metadata(dataset_name, method):
+    def update_metadata(dataset_name, family, method):
         X, y, data = get_dataset(dataset_name)
-        metadata = create_metadata_display(dataset_name, data)
+        # Compute class_names and color_map as in create_figure
+        class_names = getattr(data, 'target_names', None)
+        if class_names is None:
+            unique_classes = np.unique(y)
+            class_names = [str(c) for c in unique_classes]
+
         ctx = callback_context
         calc_status = ""
         if not ctx.triggered:
@@ -120,6 +130,16 @@ def register_main_figure_callbacks(app):
         elif trigger_id == 'focused-embedding':
             calc_status = f"Calculated {method} embedding"
 
+        if family == 'testing':
+            figure = create_3d_plot(X, y, f"3D plot of {dataset_name}", class_names)
+        else:
+            y_int = y.astype(int)
+            color_seq = px.colors.qualitative.Plotly
+            # Use class_names order for color_map to ensure consistency
+            color_map = {str(class_names[i]): color_seq[i % len(color_seq)] for i in range(len(class_names))}
+            figure = create_data_distribution_plot(data, class_names=class_names, color_map=color_map)
+
+        metadata = create_metadata_display(dataset_name, data, figure)
         return metadata, calc_status
     @app.callback(
         Output('focused-embedding', 'data'),
