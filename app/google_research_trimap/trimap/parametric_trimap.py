@@ -99,6 +99,7 @@ def fit(rng_key, inputs, n_dims,
                   distance='euclidean',
                   verbose=False):
     model_init_key, triplet_key = random.split(rng_key)
+    print(inputs.shape)
     model, state = initialize_model(inputs.shape[1], n_dims, model_init_key, lr)
     triplets, weights = generate_triplets(
         triplet_key,
@@ -108,11 +109,12 @@ def fit(rng_key, inputs, n_dims,
         n_random,
         weight_temp=weight_temp,
         distance=distance,
-        verbose=verbose)
+        verbose=True)
 
     inputs = jnp.asarray(inputs)
     for epoch in range(n_epochs):
-        state, loss, aux = train_step(state, inputs, triplets, weight_temp, reconstruction_loss_weight)
+        state, loss, aux = train_step(state, embedding=inputs, triplets=triplets, weights=weights,
+                                      alpha=reconstruction_loss_weight)
         if verbose:
             logging.info(f'Epoch {epoch} loss: {loss:.3}, '
                          f'trimap_loss {aux["triplet_loss"]:.3}, reconstruction_loss {aux["reconstruction_loss"]:.3}')
@@ -122,7 +124,9 @@ def fit(rng_key, inputs, n_dims,
 
 def transform(inputs, model_description, params):
     model = ParametricTriMap(**model_description)
-    return model.apply({'params': params}, inputs, method=ParametricTriMap.encode)
+
+    output = model.apply({'params': params}, inputs, method=ParametricTriMap.encode)
+    return output
 
 def fit_transform(rng_key, inputs, n_dims,
                   lr=1e-4,
@@ -133,7 +137,7 @@ def fit_transform(rng_key, inputs, n_dims,
                   reconstruction_loss_weight=0.05,
                   weight_temp=0.5,
                   distance='euclidean',
-                  verbose=False):
+                  verbose=True):
     model_description, params = fit(rng_key, inputs, n_dims, lr, n_inliers, n_outliers, n_random,
                                     n_epochs=n_epochs, reconstruction_loss_weight=reconstruction_loss_weight,
                                     weight_temp=weight_temp, distance=distance, verbose=verbose)

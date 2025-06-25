@@ -523,7 +523,7 @@ def trimap_metrics(embedding, triplets, weights, metric='euclidean'):
 
 
 @jax.jit
-def trimap_loss(embedding, triplets, weights, output_metric='euclidean'):
+def trimap_loss(embedding, triplets, weights, output_metric='squared_euclidean'):
   """Return trimap loss."""
   loss, _ = trimap_metrics(embedding, triplets, weights, metric=output_metric)
   return loss
