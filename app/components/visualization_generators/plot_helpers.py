@@ -25,6 +25,13 @@ def encode_img_as_str(data_point, fig_size=(4, 4)):
     img_str = base64.b64encode(buf.read()).decode()
     return img_str
 
+def create_color_map(y):
+    unique_labels = np.sort(np.unique(y))
+    color_seq = px.colors.qualitative.Plotly
+    color_map = {str(label): color_seq[i % len(color_seq)] for i, label in enumerate(unique_labels)}
+    return color_map
+
+
 def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
     is_contiunuous = len(np.unique(y)) > 20
     # Create a list of customdata for each point, including the point index
@@ -37,21 +44,22 @@ def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
 
     # Map y to class names for legend
     y_int = y.astype(int)
-    color_seq = px.colors.qualitative.Plotly
+    # color_seq = px.colors.qualitative.Plotly
 
     n_original = len(y) - n_added
     sections = [slice(0, n_original)]
 
     if n_added > 0 and embedding.shape[0] == X.shape[0]:
         sections.append(slice(n_original, None))
-
+        
     if not is_contiunuous:
         y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-        unique_labels = pd.Series(y_labels).unique()
-        color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
+        color_map = create_color_map(y_int)
+
     else:
         y_labels = y
         color_map = None
+
 
     data_frames = []
     for section in sections:
@@ -66,3 +74,5 @@ def create_main_fig_dataframe(embedding, X, y, class_names, n_added):
             df['color'] = df['color'].map(color_map)
         data_frames.append(df)
     return data_frames
+
+

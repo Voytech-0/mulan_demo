@@ -58,7 +58,7 @@ def register_main_figure_callbacks(app):
             main_fig_animated = {}
         else:
             main_fig_static = {}
-            main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class')
+            main_fig_animated = create_animated_figure(trimap_emb, y, f"TRIMAP Embedding of {dataset_name}", 'Class', class_names=class_names)
 
         if is_animated:
             static_style = {'display': 'none'}
