@@ -5,8 +5,8 @@ from components.configs.settings import CELL_STYLE, CELL_STYLE_RIGHT, TABLE_STYL
 from components.visualization_generators.plot_maker import create_data_distribution_plot
 
 
-def create_metadata_display(dataset_name, data):
-    data_distribution_fig = create_data_distribution_plot(data)
+def create_metadata_display(dataset_name, data, class_names=None, color_map=None):
+    data_distribution_fig = create_data_distribution_plot(data, class_names=class_names, color_map=color_map)
     return html.Div([
         dbc.Row([
             dbc.Col(

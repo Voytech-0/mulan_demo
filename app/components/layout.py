@@ -68,7 +68,7 @@ def create_layout(app):
                         DashCanvas(
                             id='canvas',
                             width=500,
-                            height=5000,
+                            height=500,
                             lineWidth=50,
                             lineColor='black',
                             hide_buttons=['zoom', 'pan', 'reset', 'save', 'undo',

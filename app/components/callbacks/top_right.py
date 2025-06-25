@@ -1,5 +1,7 @@
 import numpy as np
+import pandas as pd
 from dash import Output, Input, callback_context
+import plotly.express as px
 
 from components.data_operations.dataset_api import get_dataset
 from components.slow_backend_operations.added_features_api import extract_added_data, dynamically_add
@@ -31,7 +33,8 @@ def register_main_figure_callbacks(app):
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
             trimap_emb_add = dynamically_add(added_data_cache, dataset_name, distance, parametric)
-            if X_add is not None and y_add is not None and trimap_emb is not None and trimap_emb_add is not None:
+            if (isinstance(X_add, np.ndarray) and isinstance(y_add, np.ndarray) and
+                isinstance(trimap_emb, np.ndarray) and isinstance(trimap_emb_add, np.ndarray)):
                 X = np.concatenate([X, X_add], 0)
                 y = np.concatenate([y, y_add], 0)
                 trimap_emb = np.concatenate([trimap_emb, trimap_emb_add], 0)
@@ -104,7 +107,17 @@ def register_main_figure_callbacks(app):
     )
     def update_metadata(dataset_name, method):
         X, y, data = get_dataset(dataset_name)
-        metadata = create_metadata_display(dataset_name, data)
+        # Compute class_names and color_map as in create_figure
+        class_names = getattr(data, 'target_names', None)
+        if class_names is None:
+            unique_classes = np.unique(y)
+            class_names = [str(c) for c in unique_classes]
+        y_int = y.astype(int)
+        color_seq = px.colors.qualitative.Plotly
+        y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
+        # Use class_names order for color_map to ensure consistency
+        color_map = {str(class_names[i]): color_seq[i % len(color_seq)] for i in range(len(class_names))}
+        metadata = create_metadata_display(dataset_name, data, class_names=class_names, color_map=color_map)
         ctx = callback_context
         calc_status = ""
         if not ctx.triggered:
