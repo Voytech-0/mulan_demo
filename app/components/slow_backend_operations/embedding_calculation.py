@@ -63,7 +63,7 @@ def _compute_trimap_iterative(dataset_name, distance, export_iters=False):
 @cache.memoize()
 def _compute_tsne(dataset_name, distance):
     if distance == 'haversine':
-        print("t-SNE is not supported for haversine distance. Returning None.")
+        print("t-SNE is not supported for haversine distance. Returning euclidean.")
         return None, 0
 
     X, _, _ = get_dataset(dataset_name)

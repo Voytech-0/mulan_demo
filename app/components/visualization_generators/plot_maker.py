@@ -292,7 +292,11 @@ def figure_with_images(df, X, title, category_orders):
 
 def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=False, class_names=None, n_added=0,
                   dataset_name=None, interactive_figure=False):
-    if embedding is not None and hasattr(embedding, 'shape') and len(embedding.shape) == 3:
+    if embedding is None:
+        return empty_fig('Not available')
+
+
+    if hasattr(embedding, 'shape') and len(embedding.shape) == 3:
         embedding = embedding[-1]
         print("Using last frame of TRIMAP embedding for visualization")
 
