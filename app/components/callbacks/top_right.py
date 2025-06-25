@@ -30,9 +30,11 @@ def register_main_figure_callbacks(app):
         class_names = getattr(data, 'target_names', None)
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:
-            trimap_emb_add = dynamically_add(added_data_cache, *fwd_args)
-            X, y, trimap_emb = (np.concatenate([X, X_add], 0), np.concatenate([y, y_add], 0),
-                                np.concatenate([trimap_emb, trimap_emb_add], 0))
+            trimap_emb_add = dynamically_add(added_data_cache, dataset_name, distance, parametric)
+            if X_add is not None and y_add is not None and trimap_emb is not None and trimap_emb_add is not None:
+                X = np.concatenate([X, X_add], 0)
+                y = np.concatenate([y, y_add], 0)
+                trimap_emb = np.concatenate([trimap_emb, trimap_emb_add], 0)
 
         if method != 'trimap' or not is_animated:
             is_animated = False
@@ -45,7 +47,8 @@ def register_main_figure_callbacks(app):
                 X,
                 show_images=show_images,
                 class_names=class_names,
-                n_added=n_added
+                n_added=n_added,
+                dataset_name=dataset_name
             )
             main_fig_animated = {}
         else:
@@ -74,9 +77,9 @@ def register_main_figure_callbacks(app):
         fwd_args = (dataset_name, distance, parametric)
         (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args)
 
-        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False)
-        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False)
-        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False)
+        trimap_fig = create_figure(trimap_emb, y, "TRIMAP", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
+        tsne_fig = create_figure(tsne_emb, y, "t-SNE", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
+        umap_fig = create_figure(umap_emb, y, "UMAP", "Class", X, is_thumbnail=True, show_images=False, dataset_name=dataset_name)
         return trimap_fig, tsne_fig, umap_fig
 
     @app.callback(
