@@ -274,7 +274,7 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
 
     data_frames = create_main_fig_dataframe(embedding, X, y, class_names, n_added)
     category_orders = {'color': class_names}
-
+    color_map = create_color_map(y)
     # Check if we should show images and if we have image data
     df = data_frames[0]
     if show_images and dataset_name in IMAGE_ONLY_DATASETS:
@@ -288,7 +288,8 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
             custom_data=['point_index', 'label'],
             title=title,
             labels={'x': 'Component 1', 'y': 'Component 2', 'label': 'Class'},
-            category_orders=category_orders
+            category_orders=category_orders,
+            color_discrete_map=color_map
         )
 
     # Additional points
@@ -311,6 +312,12 @@ def create_figure(embedding, y, title, X=None, is_thumbnail=False, show_images=F
         )
     print('finished creating figure')
     return fig
+
+def create_color_map(y):
+    unique_labels = np.sort(np.unique(y))
+    color_seq = px.colors.qualitative.Plotly
+    color_map = {str(label): color_seq[i % len(color_seq)] for i, label in enumerate(unique_labels)}
+    return color_map
 
 def create_data_distribution_plot(data, class_names=None, color_map=None):
     class_counts = pd.Series(data.target).value_counts().sort_index()
@@ -375,19 +382,11 @@ def create_3d_plot(X, y, title, class_names=None, color_map=None, is_continuous=
         df['label'] = y
         fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
     else:
-        # Only map to class_names if they exist and are valid for all labels
-        if class_names and len(class_names) > 0:
-            try:
-                if all(0 <= int(i) < len(class_names) for i in y):
-                    df['label'] = [str(class_names[int(i)]) for i in y]
-                else:
-                    df['label'] = [str(i) for i in y]
-            except Exception:
-                df['label'] = [str(i) for i in y]
-        else:
-            df['label'] = [str(i) for i in y]
+        # y is already a list of string labels matching color_map keys
+        df['label'] = y
         if color_map is not None:
-            fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title, color_discrete_map=color_map)
+            color_discrete_map = {str(k): v for k, v in color_map.items()}
+            fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title, color_discrete_map=color_discrete_map)
         else:
             fig = px.scatter_3d(df, x='x', y='y', z='z', color='label', title=title)
 

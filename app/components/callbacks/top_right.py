@@ -9,7 +9,8 @@ from components.slow_backend_operations.embedding_calculation import compute_all
 from components.slow_backend_operations.evaluate_embedding import evaluate_embedding_quality
 from components.visualization_generators.layout_generators import create_metadata_display
 from components.visualization_generators.plot_maker import create_figure, create_animated_figure, create_3d_plot, \
-    create_data_distribution_plot
+    create_data_distribution_plot, create_color_map
+from components.visualization_generators.plot_helpers import create_main_fig_dataframe
 
 
 def register_main_figure_callbacks(app):
@@ -133,25 +134,20 @@ def register_main_figure_callbacks(app):
         # Show 3D plot for all testing datasets
         testing_datasets = ["Testing - S-curve", "Testing - Swiss Roll", "Testing - Mammoth"]
         if family == 'testing' or dataset_name in testing_datasets:
-            # Determine if continuous or categorical, and set color_map to match main plot
             is_continuous = len(np.unique(y)) > 20
-            color_map = None
+            n_added = 0
+            color_map = create_color_map(y)
             if not is_continuous:
-                # Use the same color mapping as in create_main_fig_dataframe
-                y_int = y.astype(int)
-                if class_names is None:
-                    unique_classes = np.unique(y)
-                    class_names = [str(c) for c in unique_classes]
-                color_seq = px.colors.qualitative.Plotly
-                y_labels = [str(class_names[i]) if 0 <= i < len(class_names) else str(i) for i in y_int]
-                unique_labels = pd.Series(y_labels).unique()
-                color_map = {label: color_seq[i % len(color_seq)] for i, label in enumerate(sorted(unique_labels))}
-            figure = create_3d_plot(X, y, f"3D plot of {dataset_name}", class_names, color_map=color_map, is_continuous=is_continuous)
+                y_labels = [str(label) for label in y]
+            else:
+                y_labels = y
+            # Main 3D preview
+            figure = create_3d_plot(X, y_labels, f"3D plot of {dataset_name}", class_names, color_map=color_map, is_continuous=is_continuous)
         else:
             y_int = y.astype(int)
             color_seq = px.colors.qualitative.Plotly
             # Use class_names order for color_map to ensure consistency
-            color_map = {str(class_names[i]): color_seq[i % len(class_names)] for i in range(len(class_names))}
+            color_map = create_color_map(y)
             figure = create_data_distribution_plot(data, class_names=class_names, color_map=color_map)
 
         metadata = create_metadata_display(dataset_name, data, figure)

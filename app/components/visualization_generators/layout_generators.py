@@ -3,14 +3,18 @@ import dash_bootstrap_components as dbc
 import numpy as np
 from components.configs.settings import CELL_STYLE, CELL_STYLE_RIGHT, TABLE_STYLE
 from components.visualization_generators.plot_maker import create_data_distribution_plot
+from components.configs.feature_config import DATASET_DESCRIPTIONS
+import plotly.express as px
 
 
 def create_metadata_display(dataset_name, data, figure):
+    description = DATASET_DESCRIPTIONS.get(dataset_name, "No description available for this dataset.")
     return html.Div([
         dbc.Row([
             dbc.Col(
                 html.Div([
-                    html.H4(f"Information about dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
+                    html.H4(f"Dataset '{dataset_name}'", style={'marginBottom': '0.8rem', 'lineHeight': 1.2, 'fontSize': '1.5rem'}),
+                    html.P(description, style={'marginBottom': '1.2rem', 'lineHeight': 1.2, 'fontSize': '1.1rem', 'color': '#bbb'}),
                     html.P(f"Number of samples: {data.data.shape[0]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of features: {data.data.shape[1]}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2}),
                     html.P(f"Number of classes: {len(np.unique(data.target))}", style={'marginBottom': '0.8rem', 'lineHeight': 1.2})
@@ -90,3 +94,9 @@ def create_metadata_table(features_to_display, X, point_index):
             for name, value in zip(features_to_display, X[point_index][:len(features_to_display)])
         ])
     ], style=TABLE_STYLE)
+
+def create_color_map(y):
+    unique_labels = np.sort(np.unique(y))
+    color_seq = px.colors.qualitative.Plotly
+    color_map = {str(label): color_seq[i % len(color_seq)] for i, label in enumerate(unique_labels)}
+    return color_map
