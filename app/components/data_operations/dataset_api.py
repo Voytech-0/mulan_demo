@@ -1,6 +1,7 @@
 import os
 import threading
 from io import BytesIO
+import json
 
 import numpy as np
 import glob
@@ -10,6 +11,7 @@ from PIL import Image
 from sklearn import datasets
 
 import tensorflow as tf
+from sklearn.datasets import make_s_curve, make_swiss_roll
 
 def load_PACS(domain='photo'):
     """Load PACS dataset."""
@@ -141,6 +143,49 @@ def load_elephant():
                 self.feature_names = [f'pixel_{i}' for i in range(data.shape[1])]
         return Dataset(X, y)
 
+# Testing datasets
+# Testing datasets
+
+def load_testing_s_curve(n_samples=1000, noise=0.00):
+    """Load testing S-curve dataset."""
+    X, y = make_s_curve(n_samples=n_samples, noise=noise, random_state=42)
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = []
+            self.feature_names = [f'feature_{i}' for i in range(data.shape[1])]
+    return Dataset(X, y)
+
+def load_testing_swiss_roll(n_samples=1000, noise=0.00):
+    """Load testing Swiss Roll dataset."""
+    X, y = make_swiss_roll(n_samples=n_samples, noise=noise, random_state=42)
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = []
+            self.feature_names = [f'feature_{i}' for i in range(data.shape[1])]
+    return Dataset(X, y)
+
+def load_testing_mammoth():
+    # load from data/mammoth_umap.json
+    # with open('../../data/mammoth_umap.json', 'r') as f:
+    with open('/Users/wojtek/Documents/MULAN/mulan_demo/app/data/mammoth_umap.json', 'r') as f:
+        data = json.load(f)
+    X = np.array(data['3d'], dtype=np.float32)
+    y = np.array(data['labels'], dtype=np.int32)
+    # Sample every 10th point
+    X = X[::10]
+    y = y[::10]
+    class Dataset:
+        def __init__(self, data, target):
+            self.data = data
+            self.target = target
+            self.target_names = []
+            self.feature_names = [f'feature_{i}' for i in range(data.shape[1])]
+    return Dataset(X, y)
+
 # List of available datasets
 DATASET_LOADERS = {
     "Digits": datasets.load_digits,
@@ -154,6 +199,10 @@ DATASET_LOADERS = {
     "PACS - Sketch": lambda: load_PACS("sketch"),
     "PACS - Cartoon": lambda: load_PACS("cartoon"),
     "PACS - Art Painting": lambda: load_PACS("art_painting"),
+    # Testing datasets
+    "Testing - S-curve": load_testing_s_curve,
+    "Testing - Swiss Roll": load_testing_swiss_roll,
+    "Testing - Mammoth": load_testing_mammoth,
 }
 
 # Single global lock for computations
@@ -187,4 +236,3 @@ def dataset_shape(dataset_name):
     else:  # MNIST or Fashion MNIST
         img_shape = (28, 28)
     return img_shape
-
