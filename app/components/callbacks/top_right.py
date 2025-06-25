@@ -25,8 +25,8 @@ def register_main_figure_callbacks(app):
     def update_main_figure(dataset_name, show_images, method,
                            added_data_cache, distance, parametric, is_animated=False):
         X, y, data = get_dataset(dataset_name)
-        fwd_args = (dataset_name, distance, parametric, is_animated)
-        (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args)
+        fwd_args = (dataset_name, distance, parametric)
+        (trimap_emb, tsne_emb, umap_emb), _ = compute_all_embeddings(*fwd_args, is_animated=is_animated)
         class_names = getattr(data, 'target_names', None)
         X_add, y_add, n_added = extract_added_data(added_data_cache)
         if n_added > 0:

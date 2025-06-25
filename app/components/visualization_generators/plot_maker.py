@@ -356,7 +356,6 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             category_orders=category_orders
         )
 
-
     # Additional points
     if visualize_added_samples:
         add_new_data_to_fig(fig, data_frames[1], color_map)
@@ -376,6 +375,7 @@ def create_figure(embedding, y, title, label_name, X=None, is_thumbnail=False, s
             margin=dict(l=5, r=5, t=50, b=5)
         )
     return fig
+
 def create_data_distribution_plot(data):
     class_counts = pd.Series(data.target).value_counts().sort_index()
 
