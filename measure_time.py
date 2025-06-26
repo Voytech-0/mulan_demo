@@ -6,7 +6,7 @@ from google_research_trimap.trimap import trimap
 import trimap as trimap_pip
 import jax.random as random
 from sklearn.manifold import TSNE
-from sklearn.datasets import fetch_rcv1
+from sklearn.datasets import fetch_rcv1, fetch_covtype
 import argparse
 import csv
 import os
@@ -24,18 +24,21 @@ def data_prep(data_path, dataset='MNIST', size=None):
     '''
     if dataset == 'MNIST':
         X = np.load(data_path + '/mnist_images.npy', allow_pickle=True).reshape(70000, 28 * 28)
-        labels = np.load(data_path + '/mnist_labels.npy', allow_pickle=True)
+        # labels = np.load(data_path + '/mnist_labels.npy', allow_pickle=True)
     elif dataset == 'coil_20':
         X = np.load(data_path + '/coil_20.npy', allow_pickle=True).reshape(1440, 128 * 128).astype(np.float32)
-        labels = np.load(data_path + '/coil_20_labels.npy', allow_pickle=True)
+        # labels = np.load(data_path + '/coil_20_labels.npy', allow_pickle=True)
     elif dataset == 'rcv1':
         rcv1 = fetch_rcv1()
         X = rcv1.data
-        labels = rcv1.target
+        # labels = rcv1.target
+    elif dataset == 'cover_type':
+        ct = fetch_covtype()
+        X = ct.data
     else:
         print('Unsupported dataset')
         assert (False)
-    return X, labels
+    return X
 
 
 def write_to_csv(csv_path, dataset, method, elapsed_time):
@@ -47,18 +50,22 @@ def write_to_csv(csv_path, dataset, method, elapsed_time):
         writer.writerow([dataset, method, elapsed_time])
 
 def main():
+    print("starting", flush=True)
     parser = argparse.ArgumentParser(description="Measure time for dimensionality reduction methods.")
     parser.add_argument('--method', type=str, required=True, choices=['trimap_pip', 'trimap_manual', 'trimap_auto', 'trimap_og', 'umap', 'tsne'],
                         help='Method to run: trimap_pip, trimap_manual, trimap_auto, trimap_og, umap, tsne')
-    parser.add_argument('--dataset', type=str, required=True, choices=['MNIST', 'coil_20', 'rcv1'],
+    parser.add_argument('--dataset', type=str, required=True, choices=['MNIST', 'coil_20', 'rcv1', 'cover_type'],
                         help='Dataset to use: MNIST or coil_20 or rcv1')
     parser.add_argument('--data_path', type=str, default='data', help='Path to the data directory')
     parser.add_argument('--csv_path', type=str, default='timing_results.csv', help='Path to the CSV file for results')
     args = parser.parse_args()
 
     key = random.PRNGKey(42)
-    print("Dataset:", args.dataset)
-    X, labels = data_prep(args.data_path, args.dataset)
+    print("Dataset:", args.dataset, flush=True)
+    X = data_prep(args.data_path, args.dataset)
+    print("Method:", args.method, flush=True)
+    print("Data shape:", X.shape, flush=True)
+    print("Starting time measurement for", args.method, "on", args.dataset, flush=True)
 
     if args.method == 'trimap_pip':
         start_time = time.time()
@@ -104,6 +111,8 @@ def main():
         write_to_csv(args.csv_path, args.dataset, args.method, elapsed)
     else:
         print("Unknown method.")
+
+    print("Done measuring time for", args.method, "on", args.dataset)
 
 if __name__ == '__main__':
     main()
